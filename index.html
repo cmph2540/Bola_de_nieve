@@ -3,85 +3,2267 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Bola de Nieve de Deudas — Prototipo</title>
+  <title>Bola de Nieve · Libertad Financiera</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1"></script>
+  <style>
+    /* ========= SISTEMA DE DISEÑO PROFESIONAL v3.0 FINAL ========= */
+    :root {
+      --color-bg: #F7F9FC;
+      --color-surface: #FFFFFF;
+      --color-primary: #1F4E79;    /* Azul confianza */
+      --color-primary-light: rgba(31, 78, 121, 0.08);
+      --color-secondary: #00A86B;  /* Verde ahorro */
+      --color-secondary-light: rgba(0, 168, 107, 0.08);
+      --color-accent: #FF6F61;     /* Coral para CTA */
+      --color-accent-light: rgba(255, 111, 97, 0.08);
+      --color-warning: #F59E0B;
+      --color-warning-light: rgba(245, 158, 11, 0.08);
+      --color-text: #1D1D1F;
+      --color-muted: #6B7280;
+      --color-border: #E5E7EB;
+      --shadow-sm: 0 2px 6px rgba(0,0,0,0.06);
+      --shadow-md: 0 6px 20px rgba(0,0,0,0.1);
+      --shadow-lg: 0 10px 30px rgba(0,0,0,0.15);
+      --radius-sm: 8px;
+      --radius-md: 12px;
+      --radius-lg: 16px;
+      --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
 
-  <!-- CSS externo -->
-  <link rel="stylesheet" href="styles.css">
+    * { 
+      box-sizing: border-box; 
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background: var(--color-bg);
+      color: var(--color-text);
+      line-height: 1.5;
+    }
+
+    header {
+      background: linear-gradient(135deg, var(--color-primary), #153552);
+      color: white;
+      padding: 32px 16px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    header::after {
+      content: '💰';
+      position: absolute;
+      right: 20px;
+      bottom: -10px;
+      font-size: 80px;
+      opacity: 0.1;
+      transform: rotate(-10deg);
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 16px;
+    }
+
+    h1 { 
+      margin: 0; 
+      font-weight: 700; 
+      font-size: 2rem;
+      letter-spacing: -0.5px;
+    }
+
+    .subtitle { 
+      margin-top: 8px; 
+      color: rgba(255,255,255,0.9);
+      font-size: 1.1rem;
+    }
+
+    /* ========= DASHBOARD GRID ========= */
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .dashboard-card {
+      background: var(--color-surface);
+      border-radius: var(--radius-lg);
+      padding: 20px 16px;
+      box-shadow: var(--shadow-sm);
+      transition: var(--transition);
+      position: relative;
+      overflow: hidden;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+
+    .dashboard-card:hover {
+      transform: translateY(-4px);
+      box-shadow: var(--shadow-lg);
+    }
+
+    .dashboard-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 4px;
+      background: linear-gradient(90deg, var(--color-primary), var(--color-secondary));
+    }
+
+    .card-icon {
+      font-size: 28px;
+      margin-bottom: 8px;
+    }
+
+    .card-label {
+      color: var(--color-muted);
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+      margin-bottom: 4px;
+      white-space: normal;
+      overflow: visible;
+      text-overflow: clip;
+      line-height: 1.4;
+      max-width: 100%;
+      position: relative;
+      cursor: help;
+    }
+
+    .card-label[data-tooltip]:hover:after {
+      content: attr(data-tooltip);
+      position: absolute;
+      bottom: 100%;
+      left: 0;
+      background: var(--color-primary);
+      color: white;
+      padding: 8px 12px;
+      border-radius: var(--radius-sm);
+      font-size: 12px;
+      font-weight: normal;
+      text-transform: none;
+      white-space: normal;
+      width: max-content;
+      max-width: 250px;
+      z-index: 1000;
+      box-shadow: var(--shadow-md);
+      margin-bottom: 8px;
+      line-height: 1.4;
+      pointer-events: none;
+    }
+
+    .card-value {
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--color-primary);
+      line-height: 1.2;
+      margin-bottom: 4px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .card-trend {
+      font-size: 11px;
+      color: var(--color-secondary);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      white-space: nowrap;
+    }
+
+    /* Tarjeta especial de libertad financiera */
+    .card-especial {
+      background: linear-gradient(135deg, var(--color-secondary-light), white);
+      border: 2px solid var(--color-secondary);
+      margin-bottom: 24px;
+    }
+
+    .card-especial .card-value {
+      font-size: 20px;
+      white-space: normal;
+      line-height: 1.3;
+    }
+
+    .progress-container {
+      background: #E5E7EB;
+      border-radius: 999px;
+      height: 8px;
+      margin: 16px 0 8px;
+      overflow: hidden;
+    }
+
+    .progress-bar {
+      height: 100%;
+      background: linear-gradient(90deg, var(--color-secondary), #2ecc71);
+      border-radius: 999px;
+      transition: width 0.5s ease-in-out;
+      width: 0%;
+    }
+
+    .progress-label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+      color: var(--color-muted);
+    }
+
+    /* ========= CARDS ========= */
+    .card {
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-sm);
+      padding: 24px;
+      margin-bottom: 24px;
+      transition: var(--transition);
+    }
+
+    .card:hover {
+      box-shadow: var(--shadow-md);
+    }
+
+    .card-title {
+      font-size: 1.25rem;
+      font-weight: 600;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--color-primary);
+    }
+
+    /* ========= GRIDS RESPONSIVOS ========= */
+    .grid {
+      display: grid;
+      gap: 16px;
+    }
+
+    .grid-2 { grid-template-columns: repeat(2, 1fr); }
+    .grid-3 { grid-template-columns: repeat(3, 1fr); }
+    .grid-4 { grid-template-columns: repeat(4, 1fr); }
+
+    @media (max-width: 768px) {
+      .dashboard-grid { 
+        grid-template-columns: repeat(2, 1fr); 
+        gap: 12px;
+      }
+      
+      .dashboard-card {
+        padding: 16px 12px;
+      }
+      
+      .card-value {
+        font-size: 20px;
+      }
+      
+      .grid-2, .grid-3, .grid-4 { 
+        grid-template-columns: 1fr; 
+      }
+    }
+
+    /* ========= FORMULARIOS ========= */
+    .form-group {
+      margin-bottom: 16px;
+    }
+
+    label {
+      display: block;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--color-text);
+      margin-bottom: 6px;
+    }
+
+    input, select, textarea {
+      width: 100%;
+      padding: 10px 14px;
+      border-radius: var(--radius-md);
+      border: 2px solid var(--color-border);
+      background: white;
+      font-size: 14px;
+      transition: var(--transition);
+    }
+
+    input:focus, select:focus {
+      border-color: var(--color-primary);
+      outline: none;
+      box-shadow: 0 0 0 3px rgba(31, 78, 121, 0.1);
+    }
+
+    input[readonly] {
+      background: #F8FAFE;
+      border-color: var(--color-primary-light);
+      color: var(--color-primary);
+      font-weight: 600;
+    }
+
+    /* ========= BOTONES ========= */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 10px 20px;
+      border-radius: var(--radius-md);
+      border: none;
+      font-weight: 600;
+      font-size: 13px;
+      cursor: pointer;
+      transition: var(--transition);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .btn-primary {
+      background: var(--color-accent);
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background: #ff5f4f;
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-md);
+    }
+
+    .btn-secondary {
+      background: var(--color-secondary);
+      color: white;
+    }
+
+    .btn-secondary:hover {
+      background: #00955c;
+      transform: translateY(-2px);
+    }
+
+    .btn-outline {
+      background: transparent;
+      color: var(--color-primary);
+      border: 2px solid var(--color-primary);
+    }
+
+    .btn-outline:hover {
+      background: var(--color-primary);
+      color: white;
+      transform: translateY(-2px);
+    }
+
+    .btn-sm {
+      padding: 6px 12px;
+      font-size: 12px;
+    }
+
+    /* ========= BADGES ========= */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .badge-success {
+      background: var(--color-secondary-light);
+      color: var(--color-secondary);
+    }
+
+    .badge-warning {
+      background: var(--color-warning-light);
+      color: #B45309;
+    }
+
+    .badge-primary {
+      background: var(--color-primary-light);
+      color: var(--color-primary);
+    }
+
+    /* ========= MODAL SIMULADOR ========= */
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0,0,0,0.5);
+      backdrop-filter: blur(5px);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+      animation: fadeIn 0.3s;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    .modal-content {
+      background: white;
+      border-radius: var(--radius-lg);
+      max-width: 800px;
+      width: 90%;
+      max-height: 90vh;
+      overflow-y: auto;
+      animation: slideUp 0.3s;
+    }
+
+    @keyframes slideUp {
+      from { transform: translateY(50px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+
+    .modal-header {
+      padding: 20px;
+      border-bottom: 1px solid var(--color-border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: sticky;
+      top: 0;
+      background: white;
+      z-index: 10;
+    }
+
+    .modal-header h2 {
+      margin: 0;
+      font-size: 1.3rem;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .modal-close {
+      background: none;
+      border: none;
+      font-size: 24px;
+      cursor: pointer;
+      color: var(--color-muted);
+      transition: var(--transition);
+    }
+
+    .modal-close:hover {
+      color: var(--color-accent);
+      transform: scale(1.1);
+    }
+
+    .modal-body {
+      padding: 24px;
+    }
+
+    .modal-footer {
+      padding: 20px;
+      border-top: 1px solid var(--color-border);
+      display: flex;
+      justify-content: flex-end;
+      gap: 12px;
+      position: sticky;
+      bottom: 0;
+      background: white;
+      z-index: 10;
+    }
+
+    /* Escenarios grid */
+    .escenarios-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+      margin: 24px 0;
+    }
+
+    .escenario-card {
+      padding: 20px 16px;
+      border-radius: var(--radius-md);
+      border: 3px solid;
+      transition: all 0.3s ease;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .escenario-card:hover {
+      transform: translateY(-4px);
+      box-shadow: var(--shadow-md);
+    }
+
+    .escenario-base { 
+      border-color: var(--color-primary);
+      background: var(--color-primary-light);
+    }
+    
+    .escenario-25 { 
+      border-color: var(--color-warning);
+      background: var(--color-warning-light);
+    }
+    
+    .escenario-50 { 
+      border-color: var(--color-secondary);
+      background: var(--color-secondary-light);
+    }
+
+    .escenario-valor {
+      font-size: 22px;
+      font-weight: 700;
+      margin: 16px 0 12px;
+    }
+
+    .escenario-detalle {
+      font-size: 13px;
+      color: var(--color-text);
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .escenario-detalle div {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .escenario-detalle i {
+      color: var(--color-muted);
+      font-size: 12px;
+      width: 16px;
+    }
+
+    /* Porcentaje badge */
+    .porcentaje-badge {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 4px 8px;
+      border-radius: 999px;
+      color: white;
+    }
+
+    /* Slider personalizado */
+    .slider-container {
+      margin-top: 24px;
+      padding: 20px;
+      background: var(--color-bg);
+      border-radius: var(--radius-lg);
+    }
+
+    .slider-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+
+    .slider-value {
+      background: var(--color-accent);
+      color: white;
+      padding: 4px 12px;
+      border-radius: 999px;
+      font-weight: 600;
+    }
+
+    input[type=range] {
+      -webkit-appearance: none;
+      width: 100%;
+      height: 8px;
+      background: linear-gradient(90deg, var(--color-primary), var(--color-secondary));
+      border-radius: 4px;
+      outline: none;
+      margin: 15px 0;
+    }
+
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 24px;
+      height: 24px;
+      background: white;
+      border: 2px solid var(--color-accent);
+      border-radius: 50%;
+      cursor: pointer;
+      box-shadow: var(--shadow-sm);
+      transition: all 0.2s;
+    }
+
+    input[type=range]::-webkit-slider-thumb:hover {
+      transform: scale(1.15);
+      box-shadow: var(--shadow-md);
+    }
+
+    /* Tarjeta personalizada */
+    .custom-card {
+      margin-top: 16px;
+      border: 3px solid var(--color-accent);
+      background: var(--color-accent-light);
+      border-radius: var(--radius-md);
+      padding: 20px 16px;
+    }
+
+    /* ========= COMPARADOR DE OFERTAS MEJORADO ========= */
+    .ofertas-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 16px;
+      margin-top: 16px;
+    }
+
+    .oferta-card {
+      background: white;
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-lg);
+      padding: 20px;
+      transition: var(--transition);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .oferta-card:hover {
+      transform: translateY(-4px);
+      box-shadow: var(--shadow-lg);
+      border-color: var(--color-secondary);
+    }
+
+    .oferta-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 4px;
+      background: linear-gradient(90deg, var(--color-secondary), var(--color-primary));
+    }
+
+    .oferta-entidad {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--color-primary);
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .oferta-tasa {
+      font-size: 28px;
+      font-weight: 700;
+      color: var(--color-secondary);
+      margin-bottom: 8px;
+    }
+
+    .oferta-detalle {
+      font-size: 12px;
+      color: var(--color-muted);
+      display: flex;
+      justify-content: space-between;
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px dashed var(--color-border);
+    }
+
+    .oferta-badge {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      background: var(--color-warning-light);
+      color: #B45309;
+      padding: 4px 8px;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 600;
+    }
+
+    /* ========= HISTÓRICO MEJORADO ========= */
+    .historico-stats {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-bottom: 24px;
+      background: var(--color-bg);
+      padding: 20px;
+      border-radius: var(--radius-lg);
+    }
+
+    .stat-item {
+      text-align: center;
+    }
+
+    .stat-value {
+      font-size: 28px;
+      font-weight: 700;
+      line-height: 1.2;
+      margin-bottom: 4px;
+    }
+
+    .stat-label {
+      font-size: 12px;
+      color: var(--color-muted);
+    }
+
+    .cerrada-card {
+      background: white;
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-lg);
+      margin-bottom: 20px;
+      overflow: hidden;
+      transition: var(--transition);
+    }
+
+    .cerrada-card:hover {
+      box-shadow: var(--shadow-md);
+    }
+
+    .cerrada-header {
+      background: linear-gradient(135deg, var(--color-primary), #153552);
+      color: white;
+      padding: 16px 20px;
+    }
+
+    .cerrada-badge {
+      background: var(--color-secondary);
+      color: white;
+      padding: 4px 12px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .cerrada-metrics {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+      padding: 20px;
+    }
+
+    .cerrada-metric {
+      text-align: center;
+      padding: 16px;
+      border-radius: var(--radius-md);
+    }
+
+    .cerrada-metric.primary { background: var(--color-primary-light); }
+    .cerrada-metric.secondary { background: var(--color-secondary-light); }
+    .cerrada-metric.accent { background: var(--color-accent-light); }
+
+    .cerrada-metric-label {
+      font-size: 12px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    .cerrada-metric-value {
+      font-size: 24px;
+      font-weight: 700;
+    }
+
+    .cerrada-metric-sub {
+      font-size: 11px;
+      color: var(--color-muted);
+      margin-top: 4px;
+    }
+
+    .cerrada-details {
+      padding: 16px 20px;
+      background: var(--color-bg);
+      border-top: 1px solid var(--color-border);
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+      font-size: 13px;
+    }
+
+    .cerrada-logro {
+      padding: 12px 20px;
+      background: linear-gradient(90deg, #FEF3C7, #FDE68A);
+      border-top: 1px solid #F59E0B;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: #92400E;
+      font-weight: 600;
+      font-size: 13px;
+    }
+
+    /* ========= LOGROS ========= */
+    .logros-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: 12px;
+      margin-top: 16px;
+    }
+
+    .logro-card {
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-md);
+      padding: 16px 12px;
+      text-align: center;
+      transition: var(--transition);
+    }
+
+    .logro-card.desbloqueado {
+      border-color: var(--color-secondary);
+      background: linear-gradient(135deg, white, var(--color-secondary-light));
+    }
+
+    .logro-card.bloqueado {
+      opacity: 0.5;
+      filter: grayscale(0.7);
+    }
+
+    .logro-icono {
+      font-size: 36px;
+      margin-bottom: 8px;
+    }
+
+    .logro-nombre {
+      font-weight: 600;
+      font-size: 13px;
+      margin-bottom: 4px;
+    }
+
+    .logro-desc {
+      font-size: 11px;
+      color: var(--color-muted);
+    }
+
+    /* ========= NOTIFICACIONES ========= */
+    .notifications-container {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      z-index: 2000;
+      max-width: 350px;
+    }
+
+    .notif {
+      background: white;
+      border-radius: var(--radius-md);
+      padding: 14px 16px;
+      margin-bottom: 10px;
+      box-shadow: var(--shadow-lg);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      animation: slideIn 0.3s;
+      border-left: 4px solid var(--color-secondary);
+      font-size: 13px;
+    }
+
+    .notif.success { border-left-color: var(--color-secondary); }
+    .notif.info { border-left-color: var(--color-primary); }
+    .notif.warning { border-left-color: var(--color-warning); }
+
+    @keyframes slideIn {
+      from { transform: translateX(100%); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+
+    .notif .close {
+      background: none;
+      border: none;
+      font-size: 16px;
+      cursor: pointer;
+      color: var(--color-muted);
+      padding: 0 4px;
+    }
+
+    .notif .close:hover {
+      color: var(--color-accent);
+    }
+
+    /* ========= ANIMACIONES ========= */
+    @keyframes pulse {
+      0% { box-shadow: 0 0 0 0 rgba(0, 168, 107, 0.7); }
+      70% { box-shadow: 0 0 0 10px rgba(0, 168, 107, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(0, 168, 107, 0); }
+    }
+
+    .highlight-pulse {
+      animation: pulse 1s ease;
+    }
+
+    /* ========= UTILIDADES ========= */
+    .flex { display: flex; }
+    .items-center { align-items: center; }
+    .justify-between { justify-content: space-between; }
+    .gap-2 { gap: 8px; }
+    .gap-4 { gap: 16px; }
+    .mt-4 { margin-top: 16px; }
+    .mb-4 { margin-bottom: 16px; }
+    .text-center { text-align: center; }
+    .text-muted { color: var(--color-muted); }
+
+    /* ========= FORM CONTROL PARA INPUTS READONLY ========= */
+    .form-control {
+      width: 100%;
+      padding: 8px 12px;
+      border-radius: var(--radius-md);
+      border: 2px solid var(--color-border);
+      background: var(--color-bg);
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--color-primary);
+    }
+
+    .form-control:read-only {
+      background: var(--color-primary-light);
+      border-color: var(--color-primary);
+      cursor: default;
+    }
+  </style>
 </head>
-
 <body>
   <header>
     <div class="container">
-      <h1>💠 Bola de Nieve de Deudas</h1>
-      <p class="subtitle">Simula abonos extraordinarios, reduce intereses y avanza hacia la libertad financiera.</p>
+      <h1>💠 Bola de Nieve · Libertad Financiera</h1>
+      <p class="subtitle">Simula, ahorra y libera tus deudas más rápido. </p>
     </div>
   </header>
 
   <main class="container">
+    <!-- Notificaciones -->
+    <div class="notifications-container" id="notifications"></div>
 
-    <div id="notifications"></div>
+    <!-- ========= DASHBOARD MÉTRICAS ========= -->
+    <div class="dashboard-grid" id="dashboardMetrics">
+      <div class="dashboard-card" onclick="filtrarPorMetrica('saldo')">
+        <div class="card-icon">💰</div>
+        <div class="card-label" data-tooltip="Suma total de todas tus deudas activas">SALDO TOTAL PENDIENTE</div>
+        <div class="card-value" id="totalSaldoPendiente">$0</div>
+        <div class="card-trend"><i class="fas fa-arrow-down"></i> Meta: $0</div>
+      </div>
+      
+      <div class="dashboard-card" onclick="filtrarPorMetrica('intereses')">
+        <div class="card-icon">📉</div>
+        <div class="card-label" data-tooltip="Intereses que ya no pagarás gracias a tus abonos extraordinarios">INTERESES AHORRADOS</div>
+        <div class="card-value" id="totalInteresesAhorrados">$0</div>
+        <div class="card-trend"><i class="fas fa-chart-line"></i> +Último mes</div>
+      </div>
+      
+      <div class="dashboard-card" onclick="filtrarPorMetrica('capital')">
+        <div class="card-icon">📈</div>
+        <div class="card-label" data-tooltip="Total de abonos extras realizados a capital">CAPITAL AMORTIZADO</div>
+        <div class="card-value" id="totalCapitalAmortizado">$0</div>
+        <div class="card-trend"><i class="fas fa-coins"></i> Abonos extras</div>
+      </div>
+      
+      <div class="dashboard-card" onclick="filtrarPorMetrica('cuotas')">
+        <div class="card-icon">⏱️</div>
+        <div class="card-label" data-tooltip="Cuotas que eliminaste de tu calendario de pagos">CUOTAS EVITADAS</div>
+        <div class="card-value" id="totalCuotasEvitadas">0</div>
+        <div class="card-trend"><i class="fas fa-calendar-check"></i> Tiempo recuperado</div>
+      </div>
+    </div>
 
-    <!-- Nueva obligación -->
-    <section class="card">
-      <h2 style="margin-top:0;">Crear nueva obligación</h2>
+    <!-- Tarjeta Libertad Financiera -->
+    <div class="dashboard-card" id="libertadCard">
+      <div class="card-icon">🎯</div>
+      <div class="card-label" data-tooltip="Fecha estimada en que todas tus deudas estarán pagadas">LIBERTAD FINANCIERA</div>
+      <div class="card-value" id="fechaLibertad">Calculando...</div>
+      <div class="progress-container">
+        <div class="progress-bar" id="progresoLibertad" style="width: 0%"></div>
+      </div>
+      <div class="progress-label">
+        <span>Progreso: <span id="porcentajeLibertad">0%</span></span>
+        <span id="detalleLibertad">💰 Meta: $0</span>
+      </div>
+    </div>
+
+    <!-- Gráfico -->
+    <div class="card">
+      <div class="card-title">
+        <i class="fas fa-chart-line"></i> Evolución de tu deuda
+        <div class="flex gap-2" style="margin-left: auto;">
+          <button class="btn btn-sm btn-outline" onclick="cambiarVistaGrafico('mensual')">Mensual</button>
+          <button class="btn btn-sm btn-outline" onclick="cambiarVistaGrafico('acumulado')">Acumulado</button>
+        </div>
+      </div>
+      <canvas id="graficoDeuda" style="max-height: 250px; width: 100%;"></canvas>
+    </div>
+
+    <!-- Botón Simulador -->
+    <div class="flex justify-between items-center mb-4">
+      <h2 class="card-title" style="margin:0;"><i class="fas fa-calculator"></i> Gestión de Obligaciones</h2>
+      <button class="btn btn-primary" onclick="abrirSimulador()">
+        <i class="fas fa-chart-pie"></i> Simular escenarios
+      </button>
+    </div>
+
+    <!-- Formulario Nueva Obligación -->
+    <div class="card">
+      <h2 class="card-title"><i class="fas fa-plus-circle"></i> Crear nueva obligación</h2>
       <form id="formObligacion">
-
-        <div class="row row-3">
-          <div>
+        <div class="grid grid-3">
+          <div class="form-group">
             <label>Entidad</label>
             <select id="entidadSelect" required></select>
-            <div style="margin-top:8px;">
-              <button type="button" class="btn btn-outline" id="btnAgregarEntidad">+ Agregar entidad</button>
+            <div style="margin-top:6px;">
+              <button type="button" class="btn btn-outline btn-sm" id="btnAgregarEntidad">
+                <i class="fas fa-plus"></i> Agregar
+              </button>
             </div>
           </div>
-
-          <div>
+          
+          <div class="form-group">
             <label>Tipo de crédito</label>
             <select id="tipoCredito" required>
               <option value="">Selecciona…</option>
               <option value="consumo">Consumo</option>
               <option value="tarjeta">Tarjeta de crédito</option>
+              <option value="vivienda">Vivienda</option>
               <option value="vehiculo">Vehículo</option>
-              <option value="vivienda_fija">Vivienda tasa fija</option>
+              <option value="otros">Otros</option>
             </select>
           </div>
-
-          <div>
-            <label>Fecha próximo vencimiento</label>
+          
+          <div class="form-group">
+            <label>Fecha vencimiento</label>
             <input type="date" id="fechaVencimiento" required />
           </div>
         </div>
 
-        <div class="row row-3" style="margin-top:12px;">
-          <div>
-            <label>Valor del crédito</label>
-            <input type="number" id="valorCredito" required />
+        <div class="grid grid-3">
+          <div class="form-group">
+            <label>Valor crédito (COP)</label>
+            <input type="number" id="valorCredito" min="0" step="1" placeholder="Ej: 15000000" required />
           </div>
-          <div>
-            <label>Valor cuota</label>
-            <input type="number" id="valorCuota" required />
+          <div class="form-group">
+            <label>Valor cuota (COP)</label>
+            <input type="number" id="valorCuota" min="0" step="1" placeholder="Ej: 450000" required />
           </div>
-          <div>
+          <div class="form-group">
             <label>Interés EA %</label>
-            <input type="number" id="interesEA" required />
+            <input type="number" id="interesEA" min="0" max="60" step="0.01" placeholder="Ej: 28.5" required />
           </div>
         </div>
 
-        <div style="margin-top:16px;">
-          <button type="submit" class="btn btn-primary">➕ Crear obligación</button>
+        <div class="grid grid-3">
+          <div class="form-group">
+            <label>Cuota actual N°</label>
+            <input type="number" id="numeroCuota" min="1" step="1" placeholder="Ej: 5" required />
+          </div>
+          <div class="form-group">
+            <label>Total cuotas</label>
+            <input type="number" id="cantidadCuotas" min="1" step="1" placeholder="Ej: 48" required />
+          </div>
+          <div class="form-group">
+            <label>Penalidad %</label>
+            <input type="number" id="penalidadPrepago" min="0" max="20" step="0.01" placeholder="Opcional" />
+          </div>
         </div>
 
+        <button type="submit" class="btn btn-primary">
+          <i class="fas fa-save"></i> Crear obligación
+        </button>
       </form>
-    </section>
+    </div>
 
-    <section class="card">
-      <h2>Mis obligaciones</h2>
+    <!-- Listado de Obligaciones -->
+    <div class="card">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+        <h2 class="card-title" style="margin:0;"><i class="fas fa-list"></i> Mis obligaciones</h2>
+        <div class="flex gap-2">
+          <button class="btn btn-sm btn-outline" id="btnOrdenSnowball">
+            <i class="fas fa-snowflake"></i> Bola de nieve
+          </button>
+          <button class="btn btn-sm btn-outline" id="btnOrdenAvalancha">
+            <i class="fas fa-chart-bar"></i> Avalancha
+          </button>
+        </div>
+      </div>
       <div id="listaObligaciones"></div>
-    </section>
+    </div>
 
+    <!-- Logros -->
+    <div class="card">
+      <div class="card-title">
+        <i class="fas fa-trophy"></i> Mis Logros
+        <span class="badge badge-success" id="contadorLogros">0/6</span>
+      </div>
+      <div class="logros-grid" id="logrosContainer"></div>
+    </div>
+
+    <!-- ========= HISTÓRICO MEJORADO ========= -->
+    <div class="card">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+        <h2 class="card-title" style="margin:0;">
+          <i class="fas fa-archive"></i> Histórico de obligaciones cerradas
+        </h2>
+        <button class="btn btn-secondary btn-sm" id="btnExportarCerradasXLSX">
+          <i class="fas fa-file-excel"></i> Exportar historial
+        </button>
+      </div>
+      
+      <!-- Estadísticas resumidas -->
+      <div class="historico-stats">
+        <div class="stat-item">
+          <div class="stat-value" style="color: var(--color-primary);" id="totalCerradas">0</div>
+          <div class="stat-label">Obligaciones cerradas</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-value" style="color: var(--color-secondary);" id="totalInteresesHistoricos">$0</div>
+          <div class="stat-label">Intereses ahorrados</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-value" style="color: var(--color-accent);" id="totalCuotasHistoricas">0</div>
+          <div class="stat-label">Cuotas evitadas</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-value" style="color: var(--color-warning);" id="totalAbonosHistoricos">0</div>
+          <div class="stat-label">Abonos realizados</div>
+        </div>
+      </div>
+
+      <!-- Listado detallado -->
+      <div id="cerradasListado" style="max-height: 500px; overflow-y: auto;"></div>
+    </div>
+
+    <!-- ========= COMPARADOR DE OFERTAS MEJORADO ========= -->
+    <div class="card">
+      <h2 class="card-title"><i class="fas fa-search"></i> Entidades con interés más bajo</h2>
+      
+      <div class="grid grid-2" style="margin-bottom: 20px;">
+        <div class="form-group">
+          <label>Filtrar por tipo de crédito</label>
+          <select id="comparadorTipo" onchange="filtrarOfertas()">
+            <option value="todos">Todos los tipos</option>
+            <option value="consumo">Consumo</option>
+            <option value="tarjeta">Tarjeta de crédito</option>
+            <option value="vivienda">Vivienda</option>
+            <option value="vehiculo">Vehículo</option>
+            <option value="libre_inversion">Libre inversión</option>
+          </select>
+        </div>
+        <div style="display:flex; align-items:flex-end;">
+          <button class="btn btn-secondary" id="btnBuscarOfertas" onclick="filtrarOfertas()">
+            <i class="fas fa-search"></i> Buscar mejores tasas
+          </button>
+        </div>
+      </div>
+
+      <!-- Mensaje si no hay obligaciones -->
+      <div id="ofertasMessage" style="display:none; text-align:center; padding:40px; background:var(--color-bg); border-radius:var(--radius-lg); margin-bottom:20px;">
+        <i class="fas fa-exclamation-circle" style="font-size:48px; color:var(--color-muted); margin-bottom:16px;"></i>
+        <h3 style="color:var(--color-text); margin-bottom:8px;">Agrega una obligación para ver alternativas</h3>
+        <p style="color:var(--color-muted);">Registra tus deudas actuales y te mostraremos opciones de refinanciación con mejores tasas</p>
+      </div>
+
+      <!-- Grid de ofertas -->
+      <div id="ofertasListado" class="ofertas-grid"></div>
+    </div>
   </main>
 
-  <!-- JS externo -->
-  <script src="app.js"></script>
+  <!-- ========= MODAL SIMULADOR ========= -->
+  <div id="modalSimulador" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2><i class="fas fa-chart-pie"></i> Simular impacto de abono</h2>
+        <button class="modal-close" onclick="cerrarSimulador()">&times;</button>
+      </div>
+      
+      <div class="modal-body">
+        <div class="grid grid-2">
+          <div class="form-group">
+            <label>Obligación a simular</label>
+            <select id="simulacionObligacion" onchange="actualizarSimulacion()"></select>
+          </div>
+          <div class="form-group">
+            <label>Abono base (COP)</label>
+            <input type="number" id="simulacionAbono" min="0" step="10000" value="50000" oninput="actualizarSimulacion()">
+          </div>
+        </div>
+
+        <div class="escenarios-grid">
+          <!-- Escenario Base (100%) -->
+          <div class="escenario-card escenario-base">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+              <span style="font-weight:600; color:var(--color-primary);">Esfuerzo base</span>
+              <span class="porcentaje-badge" style="background:var(--color-primary);">100%</span>
+            </div>
+            <div class="escenario-valor" style="color:var(--color-primary);" id="simBaseAbono">$50,000</div>
+            <div class="escenario-detalle">
+              <div><i class="fas fa-calendar-alt"></i> Plazo: <strong id="simBasePlazo">0</strong> meses</div>
+              <div><i class="fas fa-piggy-bank"></i> Ahorro: <strong id="simBaseAhorro">$0</strong></div>
+            </div>
+          </div>
+
+          <!-- Escenario +25% -->
+          <div class="escenario-card escenario-25">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+              <span style="font-weight:600; color:#B45309;">+25% esfuerzo</span>
+              <span class="porcentaje-badge" style="background:var(--color-warning);">125%</span>
+            </div>
+            <div class="escenario-valor" style="color:#B45309;" id="sim25Abono">$62,500</div>
+            <div class="escenario-detalle">
+              <div><i class="fas fa-calendar-alt"></i> Plazo: <strong id="sim25Plazo">0</strong> meses</div>
+              <div><i class="fas fa-piggy-bank"></i> Ahorro: <strong id="sim25Ahorro">$0</strong></div>
+            </div>
+          </div>
+
+          <!-- Escenario +50% -->
+          <div class="escenario-card escenario-50">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+              <span style="font-weight:600; color:var(--color-secondary);">+50% esfuerzo</span>
+              <span class="porcentaje-badge" style="background:var(--color-secondary);">150%</span>
+            </div>
+            <div class="escenario-valor" style="color:var(--color-secondary);" id="sim50Abono">$75,000</div>
+            <div class="escenario-detalle">
+              <div><i class="fas fa-calendar-alt"></i> Plazo: <strong id="sim50Plazo">0</strong> meses</div>
+              <div><i class="fas fa-piggy-bank"></i> Ahorro: <strong id="sim50Ahorro">$0</strong></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="slider-container">
+          <div class="slider-header">
+            <label><i class="fas fa-sliders-h" style="color:var(--color-accent);"></i> Escenario personalizado</label>
+            <span class="slider-value" id="simulacionPorcentajeValor">0%</span>
+          </div>
+          
+          <input type="range" id="simulacionPorcentaje" min="0" max="100" value="0" oninput="actualizarSimulacionPersonalizada()">
+          
+          <div class="custom-card">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+              <span style="font-weight:600; color:var(--color-accent);">Tu escenario</span>
+              <span class="porcentaje-badge" style="background:var(--color-accent);" id="porcentajeCustom">0%</span>
+            </div>
+            <div class="escenario-valor" style="color:var(--color-accent);" id="simCustomAbono">$50,000</div>
+            <div class="escenario-detalle">
+              <div><i class="fas fa-calendar-alt"></i> Plazo: <strong id="simCustomPlazo">0</strong> meses</div>
+              <div><i class="fas fa-piggy-bank"></i> Ahorro: <strong id="simCustomAhorro">$0</strong></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="aplicarSimulacion()">
+          <i class="fas fa-check"></i> Aplicar este abono
+        </button>
+        <button class="btn btn-outline" onclick="cerrarSimulador()">Cancelar</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function() {
+      "use strict";
+
+      /* ========= CONSTANTES ========= */
+      const STORAGE_KEYS = {
+        OBLIGACIONES: 'obligaciones',
+        OBLIGACIONES_CERRADAS: 'obligacionesCerradas',
+        ENTIDADES: 'entidadesListado',
+        LOGROS: 'logrosDesbloqueados'
+      };
+
+      const LOGROS_CONFIG = [
+        { id: 'primer_abono', nombre: '🥉 Primer paso', descripcion: 'Realiza tu primer abono', icono: '🎯' },
+        { id: 'ahorrador_100k', nombre: '💰 Ahorrador', descripcion: 'Ahorra $100.000', icono: '💵' },
+        { id: 'ahorrador_500k', nombre: '💪 Intermedio', descripcion: 'Ahorra $500.000', icono: '💰' },
+        { id: 'ahorrador_1m', nombre: '💎 Experto', descripcion: 'Ahorra $1.000.000', icono: '💎' },
+        { id: 'deuda_cero', nombre: '🏆 Libertad', descripcion: 'Liquida todas', icono: '🦅' },
+        { id: 'acelerador', nombre: '⚡ Acelerador', descripcion: 'Evita 12 cuotas', icono: '🚀' }
+      ];
+
+      // Base de datos de ofertas por tipo de crédito
+      const OFERTAS_DB = {
+        consumo: [
+          { entidad: 'Bancolombia', tasa: 21.5, tipo: 'Consumo', requisitos: 'Libranza o nómina', icono: '🏦' },
+          { entidad: 'BBVA', tasa: 20.8, tipo: 'Consumo', requisitos: 'Crédito rotativo', icono: '🇪🇸' },
+          { entidad: 'Banco de Bogotá', tasa: 22.3, tipo: 'Consumo', requisitos: 'Cliente preferencial', icono: '🏛️' },
+          { entidad: 'Davivienda', tasa: 23.1, tipo: 'Consumo', requisitos: 'Mixto', icono: '🏠' },
+          { entidad: 'Lulo Bank', tasa: 19.9, tipo: 'Consumo', requisitos: '100% digital', icono: '🐹' }
+        ],
+        tarjeta: [
+          { entidad: 'Nu', tasa: 28.5, tipo: 'Tarjeta', requisitos: 'Sin cuota de manejo', icono: '💜' },
+          { entidad: 'RappiCard', tasa: 29.9, tipo: 'Tarjeta', requisitos: 'Puntos Rappi', icono: '🦸' },
+          { entidad: 'Lulo Bank', tasa: 26.8, tipo: 'Tarjeta', requisitos: 'Cashback', icono: '🐹' },
+          { entidad: 'Bancolombia', tasa: 31.2, tipo: 'Tarjeta', requisitos: 'World Member', icono: '🏦' }
+        ],
+        vivienda: [
+          { entidad: 'Banco de Bogotá', tasa: 11.5, tipo: 'Vivienda', requisitos: 'Tasa fija', icono: '🏛️' },
+          { entidad: 'Davivienda', tasa: 10.8, tipo: 'Vivienda', requisitos: 'Tasa mixta', icono: '🏠' },
+          { entidad: 'BBVA', tasa: 11.2, tipo: 'Vivienda', requisitos: 'UVR + spread', icono: '🇪🇸' }
+        ],
+        vehiculo: [
+          { entidad: 'Banco de Occidente', tasa: 16.5, tipo: 'Vehículo', requisitos: 'Hasta 84 meses', icono: '🚗' },
+          { entidad: 'Davivienda', tasa: 17.2, tipo: 'Vehículo', requisitos: 'Crédito directo', icono: '🏠' }
+        ],
+        libre_inversion: [
+          { entidad: 'Lulo Bank', tasa: 18.5, tipo: 'Libre inversión', requisitos: 'Aprobación 24h', icono: '🐹' },
+          { entidad: 'BBVA', tasa: 19.8, tipo: 'Libre inversión', requisitos: 'Sin codeudor', icono: '🇪🇸' }
+        ]
+      };
+
+      // Utilidades
+      const fmtCOP = (v) => new Intl.NumberFormat('es-CO', { 
+        style: 'currency', 
+        currency: 'COP', 
+        maximumFractionDigits: 0 
+      }).format(v || 0);
+      
+      const fmtPct = (v) => `${(v * 100).toFixed(1)}%`;
+      const byId = (id) => document.getElementById(id);
+      const hoyISO = () => new Date().toISOString().slice(0, 10);
+      const parsePctToDec = (pct) => (Number(pct) || 0) / 100;
+
+      // Estado global
+      let entidadesListado = [];
+      let obligaciones = [];
+      let obligacionesCerradas = [];
+      let logrosDesbloqueados = [];
+      let ordenMetodo = 'snowball';
+      let graficoInstance = null;
+
+      /* ========= INICIALIZACIÓN ========= */
+      function inicializar() {
+        cargarEntidades();
+        cargarDatos();
+        cargarLogros();
+        renderizarTodo();
+        inicializarEventListeners();
+        verificarRecordatorios();
+        setInterval(verificarRecordatorios, 60000);
+        actualizarOfertas(); // Mostrar ofertas iniciales
+      }
+
+      function cargarEntidades() {
+        const entidadesBase = ["Bancolombia", "Davivienda", "BBVA", "Lulo Bank", "Nu", "Nequi", "Addi", "Banco de Bogotá", "Banco de Occidente"];
+        const guardadas = localStorage.getItem(STORAGE_KEYS.ENTIDADES);
+        entidadesListado = guardadas ? JSON.parse(guardadas) : entidadesBase;
+        byId('entidadSelect').innerHTML = entidadesListado.map(e => `<option value="${e}">${e}</option>`).join('');
+      }
+
+      function cargarDatos() {
+        try {
+          obligaciones = JSON.parse(localStorage.getItem(STORAGE_KEYS.OBLIGACIONES) || '[]')
+            .map(o => ({
+              ...o,
+              cantidadCuotasOriginal: o.cantidadCuotasOriginal ?? o.cantidadCuotas,
+              cuotaInicial: o.cuotaInicial || o.numeroCuota,
+              historicoAbonos: o.historicoAbonos || []
+            }));
+          obligacionesCerradas = JSON.parse(localStorage.getItem(STORAGE_KEYS.OBLIGACIONES_CERRADAS) || '[]');
+        } catch (e) {
+          obligaciones = [];
+          obligacionesCerradas = [];
+        }
+      }
+
+      function guardarDatos() {
+        localStorage.setItem(STORAGE_KEYS.OBLIGACIONES, JSON.stringify(obligaciones));
+        localStorage.setItem(STORAGE_KEYS.OBLIGACIONES_CERRADAS, JSON.stringify(obligacionesCerradas));
+      }
+
+      function cargarLogros() {
+        logrosDesbloqueados = JSON.parse(localStorage.getItem(STORAGE_KEYS.LOGROS) || '[]');
+      }
+
+      function guardarLogros() {
+        localStorage.setItem(STORAGE_KEYS.LOGROS, JSON.stringify(logrosDesbloqueados));
+      }
+
+      function notificar(msg, tipo = 'info') {
+        const id = Date.now();
+        const n = document.createElement('div');
+        n.className = `notif ${tipo}`;
+        n.id = `n-${id}`;
+        n.innerHTML = `<div>${tipo === 'success' ? '✅' : tipo === 'warning' ? '⚠️' : '🔔'} ${msg}</div>
+                      <button class="close" onclick="this.parentElement.remove()">✕</button>`;
+        byId('notifications').appendChild(n);
+        setTimeout(() => byId(`n-${id}`)?.remove(), 5000);
+      }
+
+      function lanzarConfeti(cantidad = 100) {
+        if (typeof confetti !== 'undefined') {
+          confetti({
+            particleCount: cantidad,
+            spread: 70,
+            origin: { y: 0.6 },
+            colors: ['#1F4E79', '#00A86B', '#FF6F61', '#F59E0B']
+          });
+        }
+      }
+
+      /* ========= MOTOR FINANCIERO CORREGIDO ========= */
+      function eaToEm(eaDec) {
+        return Math.pow(1 + eaDec, 1/12) - 1;
+      }
+
+      function simularIntereses(saldoInicial, em, valorCuota, maxMeses = 600) {
+        let saldo = saldoInicial;
+        let interesesAcum = 0;
+        let meses = 0;
+
+        for (let i = 0; i < maxMeses; i++) {
+          if (saldo <= 0) break;
+          const interesPeriodo = saldo * em;
+          const amortizacion = Math.max(0, valorCuota - interesPeriodo);
+          if (amortizacion <= 0) break;
+          saldo -= amortizacion;
+          interesesAcum += interesPeriodo;
+          meses++;
+        }
+        return { interesesAcum, meses, saldoFinal: Math.max(0, saldo) };
+      }
+
+      function calcularPagoPeriodoYAbono(ob, montoAbono, modoRecalculo) {
+        const ea = parsePctToDec(ob.interesEA);
+        const em = eaToEm(ea);
+
+        // Calcular cuotas restantes reales
+        const cuotasRestantes = Math.max(0, ob.cantidadCuotas - ob.numeroCuota + 1);
+        
+        // Interés del período actual
+        const interesPeriodo = ob.saldoActual * em;
+        const amortizacionCuota = Math.max(0, ob.valorCuota - interesPeriodo);
+        const saldoTrasCuota = Math.max(0, ob.saldoActual - amortizacionCuota);
+        const saldoTrasAbono = Math.max(0, saldoTrasCuota - montoAbono);
+
+        // Simular escenarios
+        const base = simularIntereses(saldoTrasCuota, em, ob.valorCuota);
+        const conAbono = simularIntereses(saldoTrasAbono, em, ob.valorCuota);
+
+        const ahorroIntereses = Math.max(0, base.interesesAcum - conAbono.interesesAcum);
+        const mesesAhorrados = Math.max(0, base.meses - conAbono.meses);
+
+        let nuevoPlazo = conAbono.meses;
+        let nuevaCuota = ob.valorCuota;
+
+        if (modoRecalculo === 'mantener_plazo') {
+          // Mantener el plazo original restante
+          nuevoPlazo = Math.max(1, cuotasRestantes - 1);
+          if (saldoTrasAbono > 0 && nuevoPlazo > 0) {
+            // Fórmula de anualidad para calcular nueva cuota
+            nuevaCuota = Math.round((saldoTrasAbono * em) / (1 - Math.pow(1 + em, -nuevoPlazo)));
+          }
+        }
+
+        return {
+          interesPeriodo,
+          amortizacionCuota,
+          saldoTrasAbono,
+          ahorroIntereses,
+          mesesAhorrados,
+          nuevaCuota,
+          nuevoPlazo
+        };
+      }
+
+      /* ========= MÉTRICAS ========= */
+      function calcularMetricasGlobales() {
+        const activas = obligaciones.filter(ob => ob.saldoActual > 0);
+        const saldoTotal = activas.reduce((sum, ob) => sum + ob.saldoActual, 0);
+        
+        const interesesActivas = obligaciones.reduce((sum, ob) => 
+          sum + (ob.historicoAbonos?.reduce((s, a) => s + (a.ahorroIntereses || 0), 0) || 0), 0);
+        const interesesCerradas = obligacionesCerradas.reduce((sum, c) => sum + (c.interesesDejadosDePagar || 0), 0);
+        
+        const capitalActivas = obligaciones.reduce((sum, ob) => 
+          sum + (ob.historicoAbonos?.reduce((s, a) => s + (a.monto || 0), 0) || 0), 0);
+        
+        const cuotasTotales = obligacionesCerradas.reduce((sum, c) => sum + (c.cuotasDejadasDePagar || 0), 0) +
+          obligaciones.reduce((sum, ob) => sum + (ob.historicoAbonos?.reduce((s, a) => s + (a.mesesAhorrados || 0), 0) || 0), 0);
+
+        return {
+          saldoTotal,
+          interesesTotales: interesesActivas + interesesCerradas,
+          capitalTotal: capitalActivas,
+          cuotasTotales
+        };
+      }
+
+      function actualizarDashboard() {
+        const m = calcularMetricasGlobales();
+        byId('totalSaldoPendiente').textContent = fmtCOP(m.saldoTotal);
+        byId('totalInteresesAhorrados').textContent = fmtCOP(m.interesesTotales);
+        byId('totalCapitalAmortizado').textContent = fmtCOP(m.capitalTotal);
+        byId('totalCuotasEvitadas').textContent = m.cuotasTotales;
+        actualizarProyeccionLibertad();
+      }
+
+      /* ========= LIBERTAD FINANCIERA CORREGIDA (BUG-01) ========= */
+      function calcularFechaLibertad() {
+        const activas = obligaciones.filter(ob => ob.saldoActual > 0);
+        
+        // Si NO hay obligaciones activas, mostrar libertad
+        if (activas.length === 0) {
+          return { 
+            fecha: '🎉 ¡YA ERES LIBRE!', 
+            progreso: 100, 
+            esLibre: true 
+          };
+        }
+
+        // Si hay activas, calcular proyección normal
+        const saldoTotal = activas.reduce((sum, ob) => sum + ob.saldoActual, 0);
+        const pagoMensual = activas.reduce((sum, ob) => sum + ob.valorCuota, 0);
+        
+        // Calcular promedio de abonos recientes (últimos 3 meses)
+        const abonosRecientes = [];
+        activas.forEach(ob => {
+          if (ob.historicoAbonos && ob.historicoAbonos.length > 0) {
+            ob.historicoAbonos.slice(-3).forEach(a => abonosRecientes.push(a.monto || 0));
+          }
+        });
+        const promedioAbono = abonosRecientes.length > 0 
+          ? abonosRecientes.reduce((a, b) => a + b, 0) / abonosRecientes.length 
+          : 0;
+        
+        const capacidad = pagoMensual + promedioAbono;
+        if (capacidad <= 0) return { fecha: 'Sin datos', progreso: 0, esLibre: false };
+
+        // Tasa promedio ponderada por saldo
+        const tasaPromedio = activas.reduce((sum, ob) => 
+          sum + (parsePctToDec(ob.interesEA) * (ob.saldoActual / saldoTotal)), 0);
+        const em = eaToEm(tasaPromedio);
+
+        // Simular pagos hasta saldar deuda
+        let meses = 0;
+        let saldoSim = saldoTotal;
+        const maxMeses = 600;
+        
+        while (saldoSim > 0.01 && meses < maxMeses) {
+          const interes = saldoSim * em;
+          const pago = Math.min(saldoSim + interes, capacidad);
+          const abonoCapital = Math.max(0, pago - interes);
+          saldoSim -= abonoCapital;
+          meses++;
+          if (abonoCapital <= 0) break;
+        }
+
+        const progreso = saldoTotal > 0 ? ((saldoTotal - Math.max(0, saldoSim)) / saldoTotal) * 100 : 100;
+        const fecha = new Date();
+        fecha.setMonth(fecha.getMonth() + meses);
+        
+        return {
+          fecha: fecha.toLocaleDateString('es-CO', { year: 'numeric', month: 'long' }),
+          progreso: Math.min(100, Math.max(0, progreso)),
+          esLibre: false
+        };
+      }
+
+      function actualizarProyeccionLibertad() {
+        const p = calcularFechaLibertad();
+        const activas = obligaciones.filter(ob => ob.saldoActual > 0);
+        const saldoTotal = activas.reduce((sum, ob) => sum + ob.saldoActual, 0);
+        
+        byId('fechaLibertad').textContent = p.fecha;
+        byId('progresoLibertad').style.width = `${p.progreso}%`;
+        byId('porcentajeLibertad').textContent = `${Math.round(p.progreso)}%`;
+        byId('detalleLibertad').innerHTML = `💰 Meta: ${fmtCOP(saldoTotal)} · ${activas.length} deuda(s)`;
+        
+        // Aplicar estilo especial solo cuando es libre
+        const libertadCard = byId('libertadCard');
+        if (p.esLibre) {
+          libertadCard.classList.add('card-especial');
+          lanzarConfeti(100);
+        } else {
+          libertadCard.classList.remove('card-especial');
+        }
+      }
+
+      /* ========= GRÁFICO ========= */
+      function renderizarGrafico() {
+        const ctx = document.getElementById('graficoDeuda').getContext('2d');
+        const puntos = [];
+        
+        if (obligaciones.length > 0) {
+          const saldoInicial = obligaciones.reduce((sum, ob) => sum + (ob.valorCredito || 0), 0);
+          puntos.push({ fecha: new Date(obligaciones[0].creadoAt || Date.now()), saldo: saldoInicial });
+
+          obligaciones.forEach(ob => {
+            if (ob.historicoAbonos) {
+              ob.historicoAbonos.forEach(a => {
+                if (a.fecha) {
+                  puntos.push({ fecha: new Date(a.fecha), saldo: a.saldoPosterior || 0 });
+                }
+              });
+            }
+          });
+        }
+
+        puntos.sort((a, b) => a.fecha - b.fecha);
+
+        if (graficoInstance) graficoInstance.destroy();
+        
+        if (puntos.length > 0) {
+          graficoInstance = new Chart(ctx, {
+            type: 'line',
+            data: {
+              labels: puntos.map(p => p.fecha.toLocaleDateString()),
+              datasets: [{
+                label: 'Deuda total',
+                data: puntos.map(p => p.saldo),
+                borderColor: '#00A86B',
+                backgroundColor: 'rgba(0,168,107,0.1)',
+                tension: 0.4,
+                fill: true
+              }]
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: {
+                tooltip: { 
+                  callbacks: { 
+                    label: (ctx) => fmtCOP(ctx.raw) 
+                  } 
+                }
+              }
+            }
+          });
+        }
+      }
+
+      /* ========= LOGROS ========= */
+      function verificarLogros() {
+        const m = calcularMetricasGlobales();
+        const nuevos = [];
+
+        if (!logrosDesbloqueados.includes('primer_abono') && m.capitalTotal > 0) nuevos.push('primer_abono');
+        if (!logrosDesbloqueados.includes('ahorrador_100k') && m.interesesTotales >= 100000) nuevos.push('ahorrador_100k');
+        if (!logrosDesbloqueados.includes('ahorrador_500k') && m.interesesTotales >= 500000) nuevos.push('ahorrador_500k');
+        if (!logrosDesbloqueados.includes('ahorrador_1m') && m.interesesTotales >= 1000000) nuevos.push('ahorrador_1m');
+        if (!logrosDesbloqueados.includes('deuda_cero') && obligaciones.filter(o => o.saldoActual > 0).length === 0) nuevos.push('deuda_cero');
+        if (!logrosDesbloqueados.includes('acelerador') && m.cuotasTotales >= 12) nuevos.push('acelerador');
+
+        if (nuevos.length > 0) {
+          logrosDesbloqueados.push(...nuevos);
+          guardarLogros();
+          nuevos.forEach(l => notificar(`🏆 Logro: ${LOGROS_CONFIG.find(x => x.id === l).nombre}`, 'success'));
+          lanzarConfeti(50);
+        }
+        renderizarLogros();
+      }
+
+      function renderizarLogros() {
+        byId('logrosContainer').innerHTML = LOGROS_CONFIG.map(l => `
+          <div class="logro-card ${logrosDesbloqueados.includes(l.id) ? 'desbloqueado' : 'bloqueado'}">
+            <div class="logro-icono">${l.icono}</div>
+            <div class="logro-nombre">${l.nombre}</div>
+            <div class="logro-desc">${l.descripcion}</div>
+          </div>
+        `).join('');
+        byId('contadorLogros').textContent = `${logrosDesbloqueados.length}/${LOGROS_CONFIG.length}`;
+      }
+
+      /* ========= APLICAR ABONO CORREGIDO (BUG-02) ========= */
+      window.aplicarAbono = function(id) {
+        const ob = obligaciones.find(o => o.id === id);
+        if (!ob) return;
+        
+        const abonoInput = byId('abono_' + id);
+        const modoSelect = byId('modo_' + id);
+        const montoAbono = Number(abonoInput?.value);
+        const modoRecalculo = modoSelect?.value || 'mantener_cuota';
+
+        if (!montoAbono || montoAbono <= 0) {
+          notificar('Ingresa un valor de abono mayor a 0', 'warning');
+          return;
+        }
+
+        const r = calcularPagoPeriodoYAbono(ob, montoAbono, modoRecalculo);
+
+        // Actualizar estado de la obligación
+        ob.saldoActual = r.saldoTrasAbono;
+        ob.numeroCuota = Math.min(ob.cantidadCuotas, ob.numeroCuota + 1);
+        
+        if (modoRecalculo === 'mantener_plazo') {
+          ob.valorCuota = r.nuevaCuota;
+          ob.cantidadCuotas = ob.numeroCuota - 1 + r.nuevoPlazo;
+        }
+
+        // Registrar en histórico con todos los datos
+        if (!ob.historicoAbonos) ob.historicoAbonos = [];
+        ob.historicoAbonos.push({
+          fecha: new Date().toLocaleDateString('es-CO'),
+          monto: montoAbono,
+          ahorroIntereses: r.ahorroIntereses,
+          amortizacionCuota: r.amortizacionCuota,
+          interesPeriodo: r.interesPeriodo,
+          saldoPosterior: r.saldoTrasAbono,
+          modoRecalculo,
+          nuevaCuota: r.nuevaCuota,
+          nuevoPlazo: r.nuevoPlazo,
+          mesesAhorrados: r.mesesAhorrados
+        });
+
+        // Actualizar UI con inputs readonly
+        const nuevoSaldoEl = byId('nuevoSaldo_' + id);
+        const nuevaCuotaEl = byId('nuevaCuota_' + id);
+        const nuevoPlazoEl = byId('nuevoPlazo_' + id);
+        const ahorroEl = byId('ahorro_' + id);
+        const mesesEl = byId('meses_' + id);
+
+        if (nuevoSaldoEl) nuevoSaldoEl.value = fmtCOP(r.saldoTrasAbono);
+        if (nuevaCuotaEl) nuevaCuotaEl.value = fmtCOP(r.nuevaCuota);
+        if (nuevoPlazoEl) nuevoPlazoEl.value = r.nuevoPlazo;
+        if (ahorroEl) ahorroEl.value = fmtCOP(r.ahorroIntereses);
+        if (mesesEl) mesesEl.textContent = r.mesesAhorrados;
+
+        // Efecto visual
+        const card = document.querySelector(`[data-id="${id}"]`);
+        if (card) {
+          card.classList.add('highlight-pulse');
+          setTimeout(() => card.classList.remove('highlight-pulse'), 1000);
+        }
+
+        guardarDatos();
+        actualizarDashboard();
+        renderizarGrafico();
+        verificarLogros();
+        
+        notificar(`✅ Ahorraste ${fmtCOP(r.ahorroIntereses)} en intereses`, 'success');
+        
+        if (r.ahorroIntereses > 50000) lanzarConfeti(50);
+      };
+
+      /* ========= CERRAR OBLIGACIÓN CORREGIDO (BUG-05) ========= */
+      window.cerrarObligacion = function(id) {
+        const ob = obligaciones.find(o => o.id === id);
+        if (!ob) return;
+        
+        if (ob.saldoActual > 0) {
+          notificar('❌ El saldo debe ser cero para cerrar', 'warning');
+          return;
+        }
+
+        const historicoAbonos = ob.historicoAbonos || [];
+        const numeroAbonos = historicoAbonos.length;
+        const totalAbonos = historicoAbonos.reduce((s, a) => s + (a.monto || 0), 0);
+        const totalInteresesDejados = historicoAbonos.reduce((s, a) => s + (a.ahorroIntereses || 0), 0);
+        const capitalAmortizado = historicoAbonos.reduce((s, a) => s + (a.amortizacionCuota || 0), 0);
+        const interesPeriodoTotal = historicoAbonos.reduce((s, a) => s + (a.interesPeriodo || 0), 0);
+        const mesesAhorradosTotal = historicoAbonos.reduce((s, a) => s + (a.mesesAhorrados || 0), 0);
+        
+        // Calcular cuotas pendientes iniciales
+        const cuotasPendientesInicial = Math.max(0, (ob.cantidadCuotasOriginal || ob.cantidadCuotas) - (ob.cuotaInicial || 1) + 1);
+        const cuotasDejadasDePagar = Math.max(0, cuotasPendientesInicial - numeroAbonos);
+        
+        // Crear objeto completo para histórico
+        const cerrada = {
+          id: crypto.randomUUID(),
+          entidad: ob.entidad,
+          tipoCredito: ob.tipoCredito,
+          fechaCierre: new Date().toLocaleString('es-CO'),
+          valorCreditoOriginal: ob.valorCredito,
+          saldoFinal: ob.saldoActual,
+          interesEA: ob.interesEA,
+          numeroAbonos: numeroAbonos,
+          totalAbonos: totalAbonos,
+          interesesDejadosDePagar: totalInteresesDejados,
+          cuotasDejadasDePagar: cuotasDejadasDePagar,
+          historicoAbonos: historicoAbonos,  // Guardar histórico COMPLETO
+          capitalAmortizado: capitalAmortizado,
+          interesPeriodoTotal: interesPeriodoTotal,
+          mesesAhorradosTotal: mesesAhorradosTotal,
+          creadoAt: ob.creadoAt
+        };
+
+        obligacionesCerradas.push(cerrada);
+        obligaciones = obligaciones.filter(o => o.id !== id);
+        
+        guardarDatos();
+        renderizarTodo();
+        lanzarConfeti(150);
+        
+        let mensaje = `🎉 ¡Felicidades! Cerraste ${ob.entidad}`;
+        if (cuotasDejadasDePagar >= 12) {
+          mensaje += ` y evitaste ${cuotasDejadasDePagar} cuotas! 🏆`;
+        } else if (totalInteresesDejados > 100000) {
+          mensaje += ` con un ahorro de ${fmtCOP(totalInteresesDejados)}! 💰`;
+        }
+        
+        notificar(mensaje, 'success');
+      };
+
+      /* ========= RENDERIZADO OBLIGACIONES CORREGIDO ========= */
+      function renderObligaciones() {
+        if (ordenMetodo === 'snowball') {
+          obligaciones.sort((a, b) => a.saldoActual - b.saldoActual);
+        } else {
+          obligaciones.sort((a, b) => parsePctToDec(b.interesEA) - parsePctToDec(a.interesEA));
+        }
+
+        const container = byId('listaObligaciones');
+        if (obligaciones.length === 0) {
+          container.innerHTML = '<div class="card text-muted text-center" style="padding:40px;">No hay obligaciones activas. ¡Comienza creando una!</div>';
+          return;
+        }
+
+        container.innerHTML = obligaciones.map(ob => {
+          const plazoRestante = ob.cantidadCuotas - ob.numeroCuota + 1;
+          const interesesAcum = ob.historicoAbonos?.reduce((s, a) => s + (a.ahorroIntereses || 0), 0) || 0;
+          const cuotasAhorradas = ob.historicoAbonos?.reduce((s, a) => s + (a.mesesAhorrados || 0), 0) || 0;
+          
+          return `
+          <div class="card" data-id="${ob.id}">
+            <div class="flex justify-between">
+              <div>
+                <h3>${ob.entidad} <span class="badge badge-success">${ob.tipoCredito}</span></h3>
+                <small><i class="far fa-calendar-alt"></i> Vence: ${ob.fechaProximoVencimiento}</small>
+              </div>
+              <div class="flex gap-2">
+                <span class="badge badge-primary"><i class="fas fa-piggy-bank"></i> ${fmtCOP(interesesAcum)}</span>
+                <button class="btn btn-sm btn-outline" onclick="cerrarObligacion('${ob.id}')">
+                  <i class="fas fa-check-circle"></i> Cerrar
+                </button>
+              </div>
+            </div>
+
+            <div class="grid grid-4" style="margin:16px 0;">
+              <div><b>Saldo</b><br>${fmtCOP(ob.saldoActual)}</div>
+              <div><b>Cuota</b><br>${fmtCOP(ob.valorCuota)}</div>
+              <div><b>Interés</b><br>${ob.interesEA}%</div>
+              <div><b>Cuota</b><br>${ob.numeroCuota}/${ob.cantidadCuotas}</div>
+            </div>
+
+            <div class="grid grid-3">
+              <input type="number" id="abono_${ob.id}" class="form-control" placeholder="Abono extra" value="50000">
+              <select id="modo_${ob.id}" class="form-control">
+                <option value="mantener_cuota">Mantener cuota (menos plazo)</option>
+                <option value="mantener_plazo">Mantener plazo (cuota menor)</option>
+              </select>
+              <button class="btn btn-secondary" onclick="aplicarAbono('${ob.id}')">
+                <i class="fas fa-check"></i> Pagar
+              </button>
+            </div>
+
+            <div class="grid grid-4" style="margin-top:16px; background:var(--color-bg); padding:12px; border-radius:var(--radius-md);">
+              <div><b>Nuevo saldo:</b> <input type="text" readonly class="form-control" id="nuevoSaldo_${ob.id}" value="${fmtCOP(ob.saldoActual)}"></div>
+              <div><b>Nueva cuota:</b> <input type="text" readonly class="form-control" id="nuevaCuota_${ob.id}" value="${fmtCOP(ob.valorCuota)}"></div>
+              <div><b>Plazo:</b> <input type="text" readonly class="form-control" id="nuevoPlazo_${ob.id}" value="${plazoRestante}"></div>
+              <div><b>Ahorro:</b> <input type="text" readonly class="form-control" id="ahorro_${ob.id}" value="$0"></div>
+            </div>
+            <div class="grid grid-4" style="margin-top:8px; font-size:12px; color:var(--color-muted);">
+              <div>Meses ahorrados: <span id="meses_${ob.id}">${cuotasAhorradas}</span></div>
+              <div>Total ahorrado: ${fmtCOP(interesesAcum)}</div>
+            </div>
+          </div>
+        `}).join('');
+      }
+
+      /* ========= RENDERIZADO HISTÓRICO CORREGIDO ========= */
+      function renderCerradas() {
+        const container = byId('cerradasListado');
+        
+        if (obligacionesCerradas.length === 0) {
+          container.innerHTML = `
+            <div style="text-align:center; padding:60px 20px; background:var(--color-bg); border-radius:var(--radius-lg);">
+              <i class="fas fa-folder-open" style="font-size:64px; color:var(--color-muted); margin-bottom:20px;"></i>
+              <h3 style="color:var(--color-text); margin-bottom:8px;">Aún no has cerrado ninguna obligación</h3>
+              <p style="color:var(--color-muted);">Cuando liquides una deuda, aparecerá aquí con todos los detalles</p>
+            </div>
+          `;
+          
+          byId('totalCerradas').textContent = '0';
+          byId('totalInteresesHistoricos').textContent = '$0';
+          byId('totalCuotasHistoricas').textContent = '0';
+          byId('totalAbonosHistoricos').textContent = '0';
+          return;
+        }
+
+        const totalCerradas = obligacionesCerradas.length;
+        const totalIntereses = obligacionesCerradas.reduce((sum, c) => sum + (c.interesesDejadosDePagar || 0), 0);
+        const totalCuotas = obligacionesCerradas.reduce((sum, c) => sum + (c.cuotasDejadasDePagar || 0), 0);
+        const totalAbonos = obligacionesCerradas.reduce((sum, c) => sum + (c.numeroAbonos || 0), 0);
+
+        byId('totalCerradas').textContent = totalCerradas;
+        byId('totalInteresesHistoricos').textContent = fmtCOP(totalIntereses);
+        byId('totalCuotasHistoricas').textContent = totalCuotas;
+        byId('totalAbonosHistoricos').textContent = totalAbonos;
+
+        container.innerHTML = obligacionesCerradas.slice().reverse().map(c => {
+          const numeroAbonos = c.numeroAbonos || c.historicoAbonos?.length || 0;
+          const valorCreditoOriginal = c.valorCreditoOriginal || 0;
+          const porcentajeAhorro = valorCreditoOriginal > 0 
+            ? Math.round((c.interesesDejadosDePagar / valorCreditoOriginal) * 100) 
+            : 0;
+
+          return `
+            <div class="cerrada-card">
+              <div class="cerrada-header">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                  <div>
+                    <h3 style="margin:0; display:flex; align-items:center; gap:8px;">
+                      <i class="fas fa-check-circle" style="color:var(--color-secondary);"></i>
+                      ${c.entidad}
+                    </h3>
+                    <small style="opacity:0.9;">
+                      <i class="far fa-calendar-alt"></i> Cerrada: ${c.fechaCierre || 'Fecha no disponible'}
+                    </small>
+                  </div>
+                  <span class="cerrada-badge">
+                    <i class="fas fa-tag"></i> COMPLETADA
+                  </span>
+                </div>
+              </div>
+              
+              <div class="cerrada-metrics">
+                <div class="cerrada-metric secondary">
+                  <div class="cerrada-metric-label">
+                    <i class="fas fa-piggy-bank"></i> Intereses ahorrados
+                  </div>
+                  <div class="cerrada-metric-value">${fmtCOP(c.interesesDejadosDePagar || 0)}</div>
+                  <div class="cerrada-metric-sub">${porcentajeAhorro}% del crédito original</div>
+                </div>
+                
+                <div class="cerrada-metric primary">
+                  <div class="cerrada-metric-label">
+                    <i class="fas fa-calendar-times"></i> Cuotas evitadas
+                  </div>
+                  <div class="cerrada-metric-value">${c.cuotasDejadasDePagar || 0}</div>
+                  <div class="cerrada-metric-sub">${((c.cuotasDejadasDePagar || 0) * 30).toLocaleString()} días recuperados</div>
+                </div>
+                
+                <div class="cerrada-metric accent">
+                  <div class="cerrada-metric-label">
+                    <i class="fas fa-hand-holding-usd"></i> Abonos realizados
+                  </div>
+                  <div class="cerrada-metric-value">${numeroAbonos}</div>
+                  <div class="cerrada-metric-sub">${numeroAbonos === 1 ? 'abono extra' : 'abonos extras'}</div>
+                </div>
+              </div>
+              
+              <div class="cerrada-details">
+                <div><span style="color:var(--color-muted);">Crédito original:</span><br><strong>${fmtCOP(c.valorCreditoOriginal || 0)}</strong></div>
+                <div><span style="color:var(--color-muted);">Total abonado:</span><br><strong>${fmtCOP(c.totalAbonos || 0)}</strong></div>
+                <div><span style="color:var(--color-muted);">Tasa EA:</span><br><strong>${c.interesEA || 'N/A'}%</strong></div>
+              </div>
+              
+              ${(c.cuotasDejadasDePagar || 0) >= 12 ? `
+                <div class="cerrada-logro">
+                  <i class="fas fa-trophy"></i>
+                  <span>¡Logro desbloqueado: Acelerador! Evitaste 12+ cuotas</span>
+                </div>
+              ` : ''}
+              
+              ${c.mesesAhorradosTotal ? `
+                <div class="cerrada-logro" style="background:var(--color-secondary-light); border-color:var(--color-secondary);">
+                  <i class="fas fa-clock"></i>
+                  <span>Total meses ahorrados: ${c.mesesAhorradosTotal}</span>
+                </div>
+              ` : ''}
+            </div>
+          `;
+        }).join('');
+      }
+
+      /* ========= COMPARADOR DE OFERTAS CORREGIDO ========= */
+      function actualizarOfertas() {
+        const tipo = byId('comparadorTipo').value;
+        const messageEl = byId('ofertasMessage');
+        const listadoEl = byId('ofertasListado');
+
+        // Mostrar mensaje si no hay obligaciones
+        if (obligaciones.length === 0) {
+          messageEl.style.display = 'block';
+          listadoEl.innerHTML = '';
+          return;
+        }
+
+        messageEl.style.display = 'none';
+
+        // Obtener tipos de crédito de las obligaciones del usuario
+        const tiposUsuario = [...new Set(obligaciones.map(o => o.tipoCredito))];
+        
+        // Filtrar ofertas
+        let ofertasMostrar = [];
+        
+        if (tipo === 'todos') {
+          // Mostrar ofertas para todos los tipos que tiene el usuario
+          tiposUsuario.forEach(t => {
+            if (OFERTAS_DB[t]) {
+              ofertasMostrar = [...ofertasMostrar, ...OFERTAS_DB[t]];
+            }
+          });
+          // Agregar algunas ofertas generales si no hay suficientes
+          if (ofertasMostrar.length < 3) {
+            ofertasMostrar = [...ofertasMostrar, ...OFERTAS_DB.consumo.slice(0, 2)];
+          }
+        } else {
+          ofertasMostrar = OFERTAS_DB[tipo] || [];
+        }
+
+        // Eliminar duplicados y ordenar por tasa
+        const ofertasUnicas = [];
+        ofertasMostrar.forEach(oferta => {
+          if (!ofertasUnicas.some(o => o.entidad === oferta.entidad && o.tasa === oferta.tasa)) {
+            ofertasUnicas.push(oferta);
+          }
+        });
+        
+        const ofertasOrdenadas = ofertasUnicas
+          .sort((a, b) => a.tasa - b.tasa)
+          .slice(0, 6); // Mostrar máximo 6 ofertas
+
+        if (ofertasOrdenadas.length === 0) {
+          listadoEl.innerHTML = `
+            <div style="grid-column:1/-1; text-align:center; padding:40px;">
+              <p style="color:var(--color-muted);">No hay ofertas disponibles para este tipo de crédito</p>
+            </div>
+          `;
+          return;
+        }
+
+        listadoEl.innerHTML = ofertasOrdenadas.map(o => {
+          const ahorroPotencial = obligaciones.length > 0 
+            ? Math.round(obligaciones[0].valorCredito * ((obligaciones[0].interesEA - o.tasa) / 100) / 12)
+            : 0;
+
+          return `
+            <div class="oferta-card">
+              <div class="oferta-badge">Recomendado</div>
+              <div class="oferta-entidad">
+                <span>${o.icono}</span> ${o.entidad}
+              </div>
+              <div class="oferta-tasa">${o.tasa}% EA</div>
+              <div style="font-size:13px; color:var(--color-text); margin-bottom:12px;">
+                <i class="fas fa-tag" style="color:var(--color-muted);"></i> ${o.tipo}
+              </div>
+              <div style="font-size:12px; color:var(--color-muted); margin-bottom:16px;">
+                <i class="fas fa-info-circle"></i> ${o.requisitos}
+              </div>
+              <div class="oferta-detalle">
+                <span><i class="fas fa-wallet"></i> Ahorro potencial</span>
+                <span style="color:var(--color-secondary); font-weight:600;">${fmtCOP(ahorroPotencial)}/mes</span>
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
+
+      window.filtrarOfertas = actualizarOfertas;
+
+      /* ========= SIMULADOR CORREGIDO ========= */
+      window.abrirSimulador = function() {
+        const modal = byId('modalSimulador');
+        const select = byId('simulacionObligacion');
+        
+        if (obligaciones.length === 0) {
+          notificar('Primero debes crear una obligación', 'warning');
+          return;
+        }
+        
+        select.innerHTML = obligaciones.map(ob => 
+          `<option value="${ob.id}">${ob.entidad} - ${fmtCOP(ob.saldoActual)}</option>`
+        ).join('');
+        modal.style.display = 'flex';
+        actualizarSimulacion();
+      };
+
+      window.cerrarSimulador = () => byId('modalSimulador').style.display = 'none';
+
+      window.actualizarSimulacion = function() {
+        const obId = byId('simulacionObligacion').value;
+        const base = Number(byId('simulacionAbono').value) || 0;
+        const ob = obligaciones.find(o => o.id === obId);
+        if (!ob) return;
+
+        // Escenario base (100%)
+        const rBase = calcularPagoPeriodoYAbono(ob, base, 'mantener_cuota');
+        byId('simBaseAbono').textContent = fmtCOP(base);
+        byId('simBasePlazo').textContent = rBase.nuevoPlazo;
+        byId('simBaseAhorro').textContent = fmtCOP(rBase.ahorroIntereses);
+
+        // Escenario +25%
+        const r25 = calcularPagoPeriodoYAbono(ob, base * 1.25, 'mantener_cuota');
+        byId('sim25Abono').textContent = fmtCOP(base * 1.25);
+        byId('sim25Plazo').textContent = r25.nuevoPlazo;
+        byId('sim25Ahorro').textContent = fmtCOP(r25.ahorroIntereses);
+
+        // Escenario +50%
+        const r50 = calcularPagoPeriodoYAbono(ob, base * 1.5, 'mantener_cuota');
+        byId('sim50Abono').textContent = fmtCOP(base * 1.5);
+        byId('sim50Plazo').textContent = r50.nuevoPlazo;
+        byId('sim50Ahorro').textContent = fmtCOP(r50.ahorroIntereses);
+
+        actualizarSimulacionPersonalizada();
+      };
+
+      window.actualizarSimulacionPersonalizada = function() {
+        const obId = byId('simulacionObligacion').value;
+        const base = Number(byId('simulacionAbono').value) || 0;
+        const pct = Number(byId('simulacionPorcentaje').value) / 100;
+        const ob = obligaciones.find(o => o.id === obId);
+        if (!ob) return;
+
+        const abonoCustom = base * (1 + pct);
+        const r = calcularPagoPeriodoYAbono(ob, abonoCustom, 'mantener_cuota');
+        
+        byId('simulacionPorcentajeValor').textContent = `${Math.round(pct * 100)}%`;
+        const porcentajeCustom = byId('porcentajeCustom');
+        porcentajeCustom.textContent = `${Math.round(pct * 100)}%`;
+        
+        if (pct <= 0.25) porcentajeCustom.style.background = 'var(--color-primary)';
+        else if (pct <= 0.5) porcentajeCustom.style.background = 'var(--color-warning)';
+        else if (pct <= 0.75) porcentajeCustom.style.background = 'var(--color-secondary)';
+        else porcentajeCustom.style.background = 'var(--color-accent)';
+        
+        byId('simCustomAbono').textContent = fmtCOP(abonoCustom);
+        byId('simCustomPlazo').textContent = r.nuevoPlazo;
+        byId('simCustomAhorro').textContent = fmtCOP(r.ahorroIntereses);
+      };
+
+      window.aplicarSimulacion = function() {
+        const obId = byId('simulacionObligacion').value;
+        const base = Number(byId('simulacionAbono').value) || 0;
+        const pct = Number(byId('simulacionPorcentaje').value) / 100;
+        const input = byId(`abono_${obId}`);
+        if (input) {
+          input.value = Math.round(base * (1 + pct));
+          input.classList.add('highlight-pulse');
+          setTimeout(() => input.classList.remove('highlight-pulse'), 1000);
+          
+          const card = document.querySelector(`[data-id="${obId}"]`);
+          if (card) {
+            card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        }
+        cerrarSimulador();
+        notificar(`✅ Abono de ${fmtCOP(Math.round(base * (1 + pct)))} listo para aplicar`, 'success');
+      };
+
+      /* ========= UTILIDADES ========= */
+      function verificarRecordatorios() {
+        const hoy = new Date();
+        obligaciones.forEach(ob => {
+          if (ob.saldoActual <= 0) return;
+          const vto = new Date(ob.fechaProximoVencimiento + 'T00:00:00');
+          const dias = Math.ceil((vto - hoy) / (1000 * 60 * 60 * 24));
+          if (dias > 0 && dias <= 3) {
+            notificar(`🔔 Vence ${ob.entidad} en ${dias} día(s)`, 'info');
+          }
+        });
+      }
+
+      function renderizarTodo() {
+        renderObligaciones();
+        renderCerradas();
+        actualizarDashboard();
+        renderizarGrafico();
+        renderizarLogros();
+        actualizarOfertas();
+      }
+
+      /* ========= EVENT LISTENERS ========= */
+      function inicializarEventListeners() {
+        byId('formObligacion').addEventListener('submit', (e) => {
+          e.preventDefault();
+          
+          const nuevaObligacion = {
+            id: crypto.randomUUID(),
+            entidad: byId('entidadSelect').value,
+            tipoCredito: byId('tipoCredito').value,
+            fechaProximoVencimiento: byId('fechaVencimiento').value || hoyISO(),
+            valorCredito: Number(byId('valorCredito').value),
+            valorCuota: Number(byId('valorCuota').value),
+            interesEA: Number(byId('interesEA').value),
+            numeroCuota: Number(byId('numeroCuota').value),
+            cantidadCuotas: Number(byId('cantidadCuotas').value),
+            cantidadCuotasOriginal: Number(byId('cantidadCuotas').value),
+            cuotaInicial: Number(byId('numeroCuota').value),
+            penalidadPrepagoPct: Number(byId('penalidadPrepago').value || 0),
+            saldoActual: Number(byId('valorCredito').value),
+            historicoAbonos: [],
+            creadoAt: new Date().toISOString()
+          };
+
+          // Validaciones
+          const errors = [];
+          if (!nuevaObligacion.entidad) errors.push('Entidad requerida');
+          if (!nuevaObligacion.tipoCredito) errors.push('Tipo de crédito requerido');
+          if (nuevaObligacion.valorCredito <= 0) errors.push('Valor del crédito debe ser > 0');
+          if (nuevaObligacion.valorCuota <= 0) errors.push('Valor cuota debe ser > 0');
+          if (nuevaObligacion.interesEA < 0 || nuevaObligacion.interesEA > 60) errors.push('Interés entre 0% y 60%');
+          if (nuevaObligacion.numeroCuota < 1) errors.push('Número de cuota debe ser ≥ 1');
+          if (nuevaObligacion.cantidadCuotas < nuevaObligacion.numeroCuota) {
+            errors.push('Cantidad cuotas debe ser ≥ número actual');
+          }
+
+          if (errors.length > 0) {
+            alert('❌ Errores:\n- ' + errors.join('\n- '));
+            return;
+          }
+
+          obligaciones.push(nuevaObligacion);
+          guardarDatos();
+          renderizarTodo();
+          e.target.reset();
+          notificar('✅ Obligación creada correctamente', 'success');
+        });
+
+        byId('btnAgregarEntidad').addEventListener('click', () => {
+          const nombre = prompt('Ingresa el nombre de la nueva entidad:');
+          if (nombre && nombre.trim().length > 1) {
+            entidadesListado.push(nombre.trim());
+            localStorage.setItem(STORAGE_KEYS.ENTIDADES, JSON.stringify(entidadesListado));
+            cargarEntidades();
+            notificar(`✅ Entidad "${nombre}" agregada`, 'success');
+          }
+        });
+
+        byId('btnOrdenSnowball').addEventListener('click', () => {
+          ordenMetodo = 'snowball';
+          renderObligaciones();
+          notificar('Ordenado por Bola de Nieve (menor saldo)', 'info');
+        });
+        
+        byId('btnOrdenAvalancha').addEventListener('click', () => {
+          ordenMetodo = 'avalancha';
+          renderObligaciones();
+          notificar('Ordenado por Avalancha (mayor tasa)', 'info');
+        });
+
+        byId('btnExportarCerradasXLSX').addEventListener('click', () => {
+          if (obligacionesCerradas.length === 0) {
+            notificar('No hay historial para exportar', 'warning');
+            return;
+          }
+          
+          const data = JSON.stringify(obligacionesCerradas, null, 2);
+          const blob = new Blob([data], { type: 'application/json' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `historial-bola-nieve-${hoyISO()}.json`;
+          a.click();
+          URL.revokeObjectURL(url);
+          notificar('📥 Historial exportado correctamente', 'success');
+        });
+
+        byId('comparadorTipo').addEventListener('change', actualizarOfertas);
+        byId('btnBuscarOfertas').addEventListener('click', actualizarOfertas);
+      }
+
+      // Funciones globales
+      window.notificar = notificar;
+      window.filtrarPorMetrica = (tipo) => {
+        notificar(`Filtro por ${tipo} disponible próximamente`, 'info');
+      };
+      window.cambiarVistaGrafico = (vista) => {
+        renderizarGrafico();
+        notificar(`Vista ${vista}`, 'info');
+      };
+      window.lanzarConfeti = lanzarConfeti;
+
+      // Inicializar cuando el DOM esté listo
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', inicializar);
+      } else {
+        inicializar();
+      }
+    })();
+  </script>
 </body>
 </html>
