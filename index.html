@@ -4,9 +4,11 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Bola de Nieve · Libertad Financiera</title>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css"> <link rel="icon" href="Icono_bola_de_nieve.png" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+  <link rel="icon" href="Icono_bola_de_nieve.png" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <style>
     /* ========= SISTEMA DE DISEÑO PROFESIONAL v3.0 FINAL ========= */
     :root {
@@ -414,7 +416,7 @@
       background: white;
       border-radius: var(--radius-lg);
       max-width: 800px;
-      width: 90%;
+      width: 95%;
       max-height: 90vh;
       overflow-y: auto;
       animation: slideUp 0.3s;
@@ -475,12 +477,46 @@
       z-index: 10;
     }
 
-    /* Escenarios grid */
+    /* Escenarios grid - MEJORADO RESPONSIVE */
     .escenarios-grid {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
       gap: 16px;
       margin: 24px 0;
+    }
+
+    @media (max-width: 768px) {
+      .escenarios-grid {
+        grid-template-columns: 1fr;
+        gap: 12px;
+      }
+      
+      .escenario-card {
+        width: 100%;
+      }
+      
+      .modal-content {
+        width: 95%;
+        margin: 10px auto;
+      }
+      
+      .modal-body {
+        padding: 16px;
+      }
+      
+      .slider-container {
+        padding: 16px;
+      }
+    }
+
+    @media (min-width: 769px) and (max-width: 1024px) {
+      .escenarios-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+      
+      .escenario-card:last-child {
+        grid-column: span 2;
+      }
     }
 
     .escenario-card {
@@ -516,26 +552,52 @@
       font-size: 22px;
       font-weight: 700;
       margin: 16px 0 12px;
+      word-break: break-word;
     }
 
+    @media (max-width: 768px) {
+      .escenario-valor {
+        font-size: 20px;
+      }
+    }
+
+    /* MEJORA: Detalle de escenarios más compacto y sin desbordes */
     .escenario-detalle {
       font-size: 13px;
       color: var(--color-text);
-      display: grid;
-      grid-template-columns: 1fr 1fr;
+      display: flex;
+      flex-direction: column;
       gap: 8px;
     }
 
-    .escenario-detalle div {
+    .escenario-detalle-item {
       display: flex;
       align-items: center;
-      gap: 4px;
+      gap: 8px;
+      flex-wrap: wrap;
     }
 
-    .escenario-detalle i {
+    .escenario-detalle-item i {
       color: var(--color-muted);
       font-size: 12px;
       width: 16px;
+      flex-shrink: 0;
+    }
+
+    .escenario-detalle-item span {
+      word-break: break-word;
+      flex: 1;
+    }
+
+    /* Para pantallas muy pequeñas, apilar verticalmente */
+    @media (max-width: 480px) {
+      .escenario-detalle-item {
+        gap: 4px;
+      }
+      
+      .escenario-detalle-item i {
+        width: 14px;
+      }
     }
 
     /* Porcentaje badge */
@@ -545,6 +607,7 @@
       padding: 4px 8px;
       border-radius: 999px;
       color: white;
+      white-space: nowrap;
     }
 
     /* Slider personalizado */
@@ -560,6 +623,8 @@
       justify-content: space-between;
       align-items: center;
       margin-bottom: 16px;
+      flex-wrap: wrap;
+      gap: 10px;
     }
 
     .slider-value {
@@ -1207,13 +1272,13 @@ footer .container {
     <div class="dashboard-card" id="libertadCard">
       <div class="card-icon">🎯</div>
       <div class="card-label" data-tooltip="Fecha estimada en que todas tus deudas estarán pagadas">LIBERTAD FINANCIERA</div>
-      <div class="card-value" id="fechaLibertad">Calculando...</div>
+      <div class="card-value" id="fechaLibertad">--</div>
       <div class="progress-container">
         <div class="progress-bar" id="progresoLibertad" style="width: 0%"></div>
       </div>
       <div class="progress-label">
         <span>Progreso: <span id="porcentajeLibertad">0%</span></span>
-        <span id="detalleLibertad">💰 Meta: $0</span>
+        <span id="detalleLibertad">💰 Sin deudas activas</span>
       </div>
     </div>
 
@@ -1338,7 +1403,7 @@ footer .container {
           <i class="fas fa-archive"></i> Histórico de obligaciones cerradas
         </h2>
         <button class="btn btn-secondary btn-sm" id="btnExportarCerradasXLSX">
-          <i class="fas fa-file-excel"></i> Exportar historial
+          <i class="fas fa-file-excel"></i> Exportar historial a Excel
         </button>
       </div>
       
@@ -1448,7 +1513,7 @@ footer .container {
       </div>
       
       <div class="modal-body">
-        <div class="grid grid-2">
+        <div class="grid grid-2" style="grid-template-columns: 1fr 1fr;">
           <div class="form-group">
             <label>Obligación a simular</label>
             <select id="simulacionObligacion" onchange="actualizarSimulacion()"></select>
@@ -1462,40 +1527,58 @@ footer .container {
         <div class="escenarios-grid">
           <!-- Escenario Base (100%) -->
           <div class="escenario-card escenario-base">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 5px;">
               <span style="font-weight:600; color:var(--color-primary);">Esfuerzo base</span>
               <span class="porcentaje-badge" style="background:var(--color-primary);">100%</span>
             </div>
-            <div class="escenario-valor" style="color:var(--color-primary);" id="simBaseAbono">$50,000</div>
+            <div class="escenario-valor" style="color:var(--color-primary);" id="simBaseAbono">$50.000</div>
             <div class="escenario-detalle">
-              <div><i class="fas fa-calendar-alt"></i> Plazo: <strong id="simBasePlazo">0</strong> meses</div>
-              <div><i class="fas fa-piggy-bank"></i> Ahorro: <strong id="simBaseAhorro">$0</strong></div>
+              <div class="escenario-detalle-item">
+                <i class="fas fa-calendar-alt"></i>
+                <span><strong>Plazo:</strong> <span id="simBasePlazo">0</span> meses</span>
+              </div>
+              <div class="escenario-detalle-item">
+                <i class="fas fa-piggy-bank"></i>
+                <span><strong>Ahorro:</strong> <span id="simBaseAhorro">$0</span></span>
+              </div>
             </div>
           </div>
 
           <!-- Escenario +25% -->
           <div class="escenario-card escenario-25">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 5px;">
               <span style="font-weight:600; color:#B45309;">+25% esfuerzo</span>
               <span class="porcentaje-badge" style="background:var(--color-warning);">125%</span>
             </div>
-            <div class="escenario-valor" style="color:#B45309;" id="sim25Abono">$62,500</div>
+            <div class="escenario-valor" style="color:#B45309;" id="sim25Abono">$62.500</div>
             <div class="escenario-detalle">
-              <div><i class="fas fa-calendar-alt"></i> Plazo: <strong id="sim25Plazo">0</strong> meses</div>
-              <div><i class="fas fa-piggy-bank"></i> Ahorro: <strong id="sim25Ahorro">$0</strong></div>
+              <div class="escenario-detalle-item">
+                <i class="fas fa-calendar-alt"></i>
+                <span><strong>Plazo:</strong> <span id="sim25Plazo">0</span> meses</span>
+              </div>
+              <div class="escenario-detalle-item">
+                <i class="fas fa-piggy-bank"></i>
+                <span><strong>Ahorro:</strong> <span id="sim25Ahorro">$0</span></span>
+              </div>
             </div>
           </div>
 
           <!-- Escenario +50% -->
           <div class="escenario-card escenario-50">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 5px;">
               <span style="font-weight:600; color:var(--color-secondary);">+50% esfuerzo</span>
               <span class="porcentaje-badge" style="background:var(--color-secondary);">150%</span>
             </div>
-            <div class="escenario-valor" style="color:var(--color-secondary);" id="sim50Abono">$75,000</div>
+            <div class="escenario-valor" style="color:var(--color-secondary);" id="sim50Abono">$75.000</div>
             <div class="escenario-detalle">
-              <div><i class="fas fa-calendar-alt"></i> Plazo: <strong id="sim50Plazo">0</strong> meses</div>
-              <div><i class="fas fa-piggy-bank"></i> Ahorro: <strong id="sim50Ahorro">$0</strong></div>
+              <div class="escenario-detalle-item">
+                <i class="fas fa-calendar-alt"></i>
+                <span><strong>Plazo:</strong> <span id="sim50Plazo">0</span> meses</span>
+              </div>
+              <div class="escenario-detalle-item">
+                <i class="fas fa-piggy-bank"></i>
+                <span><strong>Ahorro:</strong> <span id="sim50Ahorro">$0</span></span>
+              </div>
             </div>
           </div>
         </div>
@@ -1509,14 +1592,20 @@ footer .container {
           <input type="range" id="simulacionPorcentaje" min="0" max="100" value="0" oninput="actualizarSimulacionPersonalizada()">
           
           <div class="custom-card">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 5px;">
               <span style="font-weight:600; color:var(--color-accent);">Tu escenario</span>
               <span class="porcentaje-badge" style="background:var(--color-accent);" id="porcentajeCustom">0%</span>
             </div>
-            <div class="escenario-valor" style="color:var(--color-accent);" id="simCustomAbono">$50,000</div>
+            <div class="escenario-valor" style="color:var(--color-accent);" id="simCustomAbono">$50.000</div>
             <div class="escenario-detalle">
-              <div><i class="fas fa-calendar-alt"></i> Plazo: <strong id="simCustomPlazo">0</strong> meses</div>
-              <div><i class="fas fa-piggy-bank"></i> Ahorro: <strong id="simCustomAhorro">$0</strong></div>
+              <div class="escenario-detalle-item">
+                <i class="fas fa-calendar-alt"></i>
+                <span><strong>Plazo:</strong> <span id="simCustomPlazo">0</span> meses</span>
+              </div>
+              <div class="escenario-detalle-item">
+                <i class="fas fa-piggy-bank"></i>
+                <span><strong>Ahorro:</strong> <span id="simCustomAhorro">$0</span></span>
+              </div>
             </div>
           </div>
         </div>
@@ -1586,8 +1675,9 @@ footer .container {
       const fmtCOP = (v) => new Intl.NumberFormat('es-CO', { 
         style: 'currency', 
         currency: 'COP', 
+        minimumFractionDigits: 0,
         maximumFractionDigits: 0 
-      }).format(v || 0);
+      }).format(v || 0).replace(/\s/g, '');
       
       const fmtPct = (v) => `${(v * 100).toFixed(1)}%`;
       const byId = (id) => document.getElementById(id);
@@ -1611,7 +1701,7 @@ footer .container {
         inicializarEventListeners();
         verificarRecordatorios();
         setInterval(verificarRecordatorios, 60000);
-        actualizarOfertas(); // Mostrar ofertas iniciales
+        actualizarOfertas();
       }
 
       function cargarEntidades() {
@@ -1698,30 +1788,25 @@ footer .container {
         const ea = parsePctToDec(ob.interesEA);
         const em = eaToEm(ea);
 
-        // Calcular cuotas restantes reales
         const cuotasRestantes = Math.max(0, ob.cantidadCuotas - ob.numeroCuota + 1);
         
-        // Interés del período actual
         const interesPeriodo = ob.saldoActual * em;
         const amortizacionCuota = Math.max(0, ob.valorCuota - interesPeriodo);
         const saldoTrasCuota = Math.max(0, ob.saldoActual - amortizacionCuota);
         const saldoTrasAbono = Math.max(0, saldoTrasCuota - montoAbono);
 
-        // Simular escenarios
         const base = simularIntereses(saldoTrasCuota, em, ob.valorCuota);
         const conAbono = simularIntereses(saldoTrasAbono, em, ob.valorCuota);
 
         const ahorroIntereses = Math.max(0, base.interesesAcum - conAbono.interesesAcum);
-        const mesesAhorrados = Math.max(0, base.meses - conAbono.meses);
+        const mesesAhorrados = Math.max(0, cuotasRestantes - conAbono.meses);
 
         let nuevoPlazo = conAbono.meses;
         let nuevaCuota = ob.valorCuota;
 
         if (modoRecalculo === 'mantener_plazo') {
-          // Mantener el plazo original restante
           nuevoPlazo = Math.max(1, cuotasRestantes - 1);
           if (saldoTrasAbono > 0 && nuevoPlazo > 0) {
-            // Fórmula de anualidad para calcular nueva cuota
             nuevaCuota = Math.round((saldoTrasAbono * em) / (1 - Math.pow(1 + em, -nuevoPlazo)));
           }
         }
@@ -1769,24 +1854,22 @@ footer .container {
         actualizarProyeccionLibertad();
       }
 
-      /* ========= LIBERTAD FINANCIERA CORREGIDA (BUG-01) ========= */
+      /* ========= LIBERTAD FINANCIERA CORREGIDA ========= */
       function calcularFechaLibertad() {
         const activas = obligaciones.filter(ob => ob.saldoActual > 0);
         
-        // Si NO hay obligaciones activas, mostrar libertad
         if (activas.length === 0) {
           return { 
-            fecha: '🎉 ¡YA ERES LIBRE!', 
-            progreso: 100, 
-            esLibre: true 
+            fecha: '--', 
+            progreso: 0, 
+            esLibre: false,
+            mensajeDetalle: '💰 Sin deudas activas'
           };
         }
 
-        // Si hay activas, calcular proyección normal
         const saldoTotal = activas.reduce((sum, ob) => sum + ob.saldoActual, 0);
         const pagoMensual = activas.reduce((sum, ob) => sum + ob.valorCuota, 0);
         
-        // Calcular promedio de abonos recientes (últimos 3 meses)
         const abonosRecientes = [];
         activas.forEach(ob => {
           if (ob.historicoAbonos && ob.historicoAbonos.length > 0) {
@@ -1798,14 +1881,12 @@ footer .container {
           : 0;
         
         const capacidad = pagoMensual + promedioAbono;
-        if (capacidad <= 0) return { fecha: 'Sin datos', progreso: 0, esLibre: false };
+        if (capacidad <= 0) return { fecha: 'Sin datos', progreso: 0, esLibre: false, mensajeDetalle: `💰 ${activas.length} deuda(s)` };
 
-        // Tasa promedio ponderada por saldo
         const tasaPromedio = activas.reduce((sum, ob) => 
           sum + (parsePctToDec(ob.interesEA) * (ob.saldoActual / saldoTotal)), 0);
         const em = eaToEm(tasaPromedio);
 
-        // Simular pagos hasta saldar deuda
         let meses = 0;
         let saldoSim = saldoTotal;
         const maxMeses = 600;
@@ -1826,23 +1907,22 @@ footer .container {
         return {
           fecha: fecha.toLocaleDateString('es-CO', { year: 'numeric', month: 'long' }),
           progreso: Math.min(100, Math.max(0, progreso)),
-          esLibre: false
+          esLibre: false,
+          mensajeDetalle: `💰 ${fmtCOP(saldoTotal)} · ${activas.length} deuda(s)`
         };
       }
 
       function actualizarProyeccionLibertad() {
         const p = calcularFechaLibertad();
         const activas = obligaciones.filter(ob => ob.saldoActual > 0);
-        const saldoTotal = activas.reduce((sum, ob) => sum + ob.saldoActual, 0);
         
         byId('fechaLibertad').textContent = p.fecha;
         byId('progresoLibertad').style.width = `${p.progreso}%`;
         byId('porcentajeLibertad').textContent = `${Math.round(p.progreso)}%`;
-        byId('detalleLibertad').innerHTML = `💰 Meta: ${fmtCOP(saldoTotal)} · ${activas.length} deuda(s)`;
+        byId('detalleLibertad').innerHTML = p.mensajeDetalle || `💰 ${activas.length} deuda(s)`;
         
-        // Aplicar estilo especial solo cuando es libre
         const libertadCard = byId('libertadCard');
-        if (p.esLibre) {
+        if (activas.length === 0 && obligacionesCerradas.length > 0) {
           libertadCard.classList.add('card-especial');
           lanzarConfeti(100);
         } else {
@@ -1900,6 +1980,23 @@ footer .container {
               }
             }
           });
+        } else {
+          graficoInstance = new Chart(ctx, {
+            type: 'line',
+            data: {
+              labels: ['Sin datos'],
+              datasets: [{
+                label: 'Deuda total',
+                data: [0],
+                borderColor: '#00A86B',
+                backgroundColor: 'rgba(0,168,107,0.1)'
+              }]
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false
+            }
+          });
         }
       }
 
@@ -1912,7 +2009,7 @@ footer .container {
         if (!logrosDesbloqueados.includes('ahorrador_100k') && m.interesesTotales >= 100000) nuevos.push('ahorrador_100k');
         if (!logrosDesbloqueados.includes('ahorrador_500k') && m.interesesTotales >= 500000) nuevos.push('ahorrador_500k');
         if (!logrosDesbloqueados.includes('ahorrador_1m') && m.interesesTotales >= 1000000) nuevos.push('ahorrador_1m');
-        if (!logrosDesbloqueados.includes('deuda_cero') && obligaciones.filter(o => o.saldoActual > 0).length === 0) nuevos.push('deuda_cero');
+        if (!logrosDesbloqueados.includes('deuda_cero') && obligaciones.filter(o => o.saldoActual > 0).length === 0 && obligacionesCerradas.length > 0) nuevos.push('deuda_cero');
         if (!logrosDesbloqueados.includes('acelerador') && m.cuotasTotales >= 12) nuevos.push('acelerador');
 
         if (nuevos.length > 0) {
@@ -1935,7 +2032,7 @@ footer .container {
         byId('contadorLogros').textContent = `${logrosDesbloqueados.length}/${LOGROS_CONFIG.length}`;
       }
 
-      /* ========= APLICAR ABONO CORREGIDO (BUG-02) ========= */
+      /* ========= APLICAR ABONO CORREGIDO ========= */
       window.aplicarAbono = function(id) {
         const ob = obligaciones.find(o => o.id === id);
         if (!ob) return;
@@ -1952,7 +2049,6 @@ footer .container {
 
         const r = calcularPagoPeriodoYAbono(ob, montoAbono, modoRecalculo);
 
-        // Actualizar estado de la obligación
         ob.saldoActual = r.saldoTrasAbono;
         ob.numeroCuota = Math.min(ob.cantidadCuotas, ob.numeroCuota + 1);
         
@@ -1961,7 +2057,6 @@ footer .container {
           ob.cantidadCuotas = ob.numeroCuota - 1 + r.nuevoPlazo;
         }
 
-        // Registrar en histórico con todos los datos
         if (!ob.historicoAbonos) ob.historicoAbonos = [];
         ob.historicoAbonos.push({
           fecha: new Date().toLocaleDateString('es-CO'),
@@ -1976,7 +2071,6 @@ footer .container {
           mesesAhorrados: r.mesesAhorrados
         });
 
-        // Actualizar UI con inputs readonly
         const nuevoSaldoEl = byId('nuevoSaldo_' + id);
         const nuevaCuotaEl = byId('nuevaCuota_' + id);
         const nuevoPlazoEl = byId('nuevoPlazo_' + id);
@@ -1989,7 +2083,6 @@ footer .container {
         if (ahorroEl) ahorroEl.value = fmtCOP(r.ahorroIntereses);
         if (mesesEl) mesesEl.textContent = r.mesesAhorrados;
 
-        // Efecto visual
         const card = document.querySelector(`[data-id="${id}"]`);
         if (card) {
           card.classList.add('highlight-pulse');
@@ -2006,7 +2099,7 @@ footer .container {
         if (r.ahorroIntereses > 50000) lanzarConfeti(50);
       };
 
-      /* ========= CERRAR OBLIGACIÓN CORREGIDO (BUG-05) ========= */
+      /* ========= CERRAR OBLIGACIÓN CORREGIDO ========= */
       window.cerrarObligacion = function(id) {
         const ob = obligaciones.find(o => o.id === id);
         if (!ob) return;
@@ -2024,11 +2117,9 @@ footer .container {
         const interesPeriodoTotal = historicoAbonos.reduce((s, a) => s + (a.interesPeriodo || 0), 0);
         const mesesAhorradosTotal = historicoAbonos.reduce((s, a) => s + (a.mesesAhorrados || 0), 0);
         
-        // Calcular cuotas pendientes iniciales
         const cuotasPendientesInicial = Math.max(0, (ob.cantidadCuotasOriginal || ob.cantidadCuotas) - (ob.cuotaInicial || 1) + 1);
         const cuotasDejadasDePagar = Math.max(0, cuotasPendientesInicial - numeroAbonos);
         
-        // Crear objeto completo para histórico
         const cerrada = {
           id: crypto.randomUUID(),
           entidad: ob.entidad,
@@ -2041,7 +2132,7 @@ footer .container {
           totalAbonos: totalAbonos,
           interesesDejadosDePagar: totalInteresesDejados,
           cuotasDejadasDePagar: cuotasDejadasDePagar,
-          historicoAbonos: historicoAbonos,  // Guardar histórico COMPLETO
+          historicoAbonos: historicoAbonos,
           capitalAmortizado: capitalAmortizado,
           interesPeriodoTotal: interesPeriodoTotal,
           mesesAhorradosTotal: mesesAhorradosTotal,
@@ -2243,7 +2334,6 @@ footer .container {
         const messageEl = byId('ofertasMessage');
         const listadoEl = byId('ofertasListado');
 
-        // Mostrar mensaje si no hay obligaciones
         if (obligaciones.length === 0) {
           messageEl.style.display = 'block';
           listadoEl.innerHTML = '';
@@ -2252,20 +2342,16 @@ footer .container {
 
         messageEl.style.display = 'none';
 
-        // Obtener tipos de crédito de las obligaciones del usuario
         const tiposUsuario = [...new Set(obligaciones.map(o => o.tipoCredito))];
         
-        // Filtrar ofertas
         let ofertasMostrar = [];
         
         if (tipo === 'todos') {
-          // Mostrar ofertas para todos los tipos que tiene el usuario
           tiposUsuario.forEach(t => {
             if (OFERTAS_DB[t]) {
               ofertasMostrar = [...ofertasMostrar, ...OFERTAS_DB[t]];
             }
           });
-          // Agregar algunas ofertas generales si no hay suficientes
           if (ofertasMostrar.length < 3) {
             ofertasMostrar = [...ofertasMostrar, ...OFERTAS_DB.consumo.slice(0, 2)];
           }
@@ -2273,7 +2359,6 @@ footer .container {
           ofertasMostrar = OFERTAS_DB[tipo] || [];
         }
 
-        // Eliminar duplicados y ordenar por tasa
         const ofertasUnicas = [];
         ofertasMostrar.forEach(oferta => {
           if (!ofertasUnicas.some(o => o.entidad === oferta.entidad && o.tasa === oferta.tasa)) {
@@ -2283,7 +2368,7 @@ footer .container {
         
         const ofertasOrdenadas = ofertasUnicas
           .sort((a, b) => a.tasa - b.tasa)
-          .slice(0, 6); // Mostrar máximo 6 ofertas
+          .slice(0, 6);
 
         if (ofertasOrdenadas.length === 0) {
           listadoEl.innerHTML = `
@@ -2348,19 +2433,16 @@ footer .container {
         const ob = obligaciones.find(o => o.id === obId);
         if (!ob) return;
 
-        // Escenario base (100%)
         const rBase = calcularPagoPeriodoYAbono(ob, base, 'mantener_cuota');
         byId('simBaseAbono').textContent = fmtCOP(base);
         byId('simBasePlazo').textContent = rBase.nuevoPlazo;
         byId('simBaseAhorro').textContent = fmtCOP(rBase.ahorroIntereses);
 
-        // Escenario +25%
         const r25 = calcularPagoPeriodoYAbono(ob, base * 1.25, 'mantener_cuota');
         byId('sim25Abono').textContent = fmtCOP(base * 1.25);
         byId('sim25Plazo').textContent = r25.nuevoPlazo;
         byId('sim25Ahorro').textContent = fmtCOP(r25.ahorroIntereses);
 
-        // Escenario +50%
         const r50 = calcularPagoPeriodoYAbono(ob, base * 1.5, 'mantener_cuota');
         byId('sim50Abono').textContent = fmtCOP(base * 1.5);
         byId('sim50Plazo').textContent = r50.nuevoPlazo;
@@ -2412,6 +2494,50 @@ footer .container {
         notificar(`✅ Abono de ${fmtCOP(Math.round(base * (1 + pct)))} listo para aplicar`, 'success');
       };
 
+      /* ========= EXPORTAR A EXCEL CORREGIDO ========= */
+      function exportarAExcel() {
+        if (obligacionesCerradas.length === 0) {
+          notificar('No hay historial para exportar', 'warning');
+          return;
+        }
+
+        try {
+          const datosExcel = obligacionesCerradas.map(c => ({
+            'Entidad': c.entidad || 'N/A',
+            'Tipo de crédito': c.tipoCredito || 'N/A',
+            'Fecha de cierre': c.fechaCierre || 'N/A',
+            'Valor crédito original': c.valorCreditoOriginal || 0,
+            'Saldo final': c.saldoFinal || 0,
+            'Tasa EA %': c.interesEA || 0,
+            'Número de abonos': c.numeroAbonos || 0,
+            'Total abonado': c.totalAbonos || 0,
+            'Intereses ahorrados': c.interesesDejadosDePagar || 0,
+            'Cuotas evitadas': c.cuotasDejadasDePagar || 0,
+            'Meses ahorrados total': c.mesesAhorradosTotal || 0
+          }));
+
+          const wb = XLSX.utils.book_new();
+          const ws = XLSX.utils.json_to_sheet(datosExcel);
+          
+          const colWidths = [
+            { wch: 20 }, { wch: 15 }, { wch: 20 }, { wch: 15 },
+            { wch: 15 }, { wch: 10 }, { wch: 12 }, { wch: 15 },
+            { wch: 15 }, { wch: 12 }, { wch: 15 }
+          ];
+          ws['!cols'] = colWidths;
+
+          XLSX.utils.book_append_sheet(wb, ws, 'Historial');
+          
+          const fecha = hoyISO();
+          XLSX.writeFile(wb, `historial-bola-nieve-${fecha}.xlsx`);
+          
+          notificar('📥 Historial exportado a Excel correctamente', 'success');
+        } catch (error) {
+          console.error('Error al exportar a Excel:', error);
+          notificar('❌ Error al exportar a Excel', 'warning');
+        }
+      }
+
       /* ========= UTILIDADES ========= */
       function verificarRecordatorios() {
         const hoy = new Date();
@@ -2457,7 +2583,6 @@ footer .container {
             creadoAt: new Date().toISOString()
           };
 
-          // Validaciones
           const errors = [];
           if (!nuevaObligacion.entidad) errors.push('Entidad requerida');
           if (!nuevaObligacion.tipoCredito) errors.push('Tipo de crédito requerido');
@@ -2503,28 +2628,12 @@ footer .container {
           notificar('Ordenado por Avalancha (mayor tasa)', 'info');
         });
 
-        byId('btnExportarCerradasXLSX').addEventListener('click', () => {
-          if (obligacionesCerradas.length === 0) {
-            notificar('No hay historial para exportar', 'warning');
-            return;
-          }
-          
-          const data = JSON.stringify(obligacionesCerradas, null, 2);
-          const blob = new Blob([data], { type: 'application/json' });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = `historial-bola-nieve-${hoyISO()}.json`;
-          a.click();
-          URL.revokeObjectURL(url);
-          notificar('📥 Historial exportado correctamente', 'success');
-        });
+        byId('btnExportarCerradasXLSX').addEventListener('click', exportarAExcel);
 
         byId('comparadorTipo').addEventListener('change', actualizarOfertas);
         byId('btnBuscarOfertas').addEventListener('click', actualizarOfertas);
       }
 
-      // Funciones globales
       window.notificar = notificar;
       window.filtrarPorMetrica = (tipo) => {
         notificar(`Filtro por ${tipo} disponible próximamente`, 'info');
@@ -2535,7 +2644,6 @@ footer .container {
       };
       window.lanzarConfeti = lanzarConfeti;
 
-      // Inicializar cuando el DOM esté listo
       if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', inicializar);
       } else {
@@ -2713,13 +2821,10 @@ function enviarMensajeContacto(event) {
   const asunto = document.getElementById('contactoAsunto')?.value || '';
   const mensaje = document.getElementById('contactoMensaje')?.value || '';
   
-  // Aquí puedes agregar lógica para enviar el mensaje
-  // Por ahora solo mostramos una notificación
   notificar(`✅ Mensaje enviado (demo)\nGracias ${nombre}, te contactaremos pronto.`, 'success');
   cerrarModalLegal();
 }
 
-// Cerrar modal con tecla ESC
 document.addEventListener('keydown', function(event) {
   if (event.key === 'Escape') {
     cerrarModalLegal();
