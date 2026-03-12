@@ -561,10 +561,7 @@
       }
     }
 
-    /* MEJORA: Detalle de escenarios más compacto y sin desbordes */
     .escenario-detalle {
-      font-size: 13px;
-      color: var(--color-text);
       display: flex;
       flex-direction: column;
       gap: 8px;
@@ -589,7 +586,6 @@
       flex: 1;
     }
 
-    /* Para pantallas muy pequeñas, apilar verticalmente */
     @media (max-width: 480px) {
       .escenario-detalle-item {
         gap: 4px;
@@ -744,7 +740,7 @@
       font-weight: 600;
     }
 
-    /* ========= HISTÓRICO MEJORADO ========= */
+    /* ========= HISTÓRICO MEJORADO - RESPONSIVE ========= */
     .historico-stats {
       display: grid;
       grid-template-columns: repeat(4, 1fr);
@@ -755,20 +751,47 @@
       border-radius: var(--radius-lg);
     }
 
+    @media (max-width: 768px) {
+      .historico-stats {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 12px;
+        padding: 16px;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .historico-stats {
+        grid-template-columns: 1fr;
+        gap: 10px;
+      }
+    }
+
     .stat-item {
       text-align: center;
+      padding: 8px;
+      background: white;
+      border-radius: var(--radius-md);
+      box-shadow: var(--shadow-sm);
     }
 
     .stat-value {
-      font-size: 28px;
+      font-size: 24px;
       font-weight: 700;
       line-height: 1.2;
       margin-bottom: 4px;
+      word-break: break-word;
+    }
+
+    @media (max-width: 768px) {
+      .stat-value {
+        font-size: 20px;
+      }
     }
 
     .stat-label {
-      font-size: 12px;
+      font-size: 11px;
       color: var(--color-muted);
+      word-break: break-word;
     }
 
     .cerrada-card {
@@ -790,6 +813,20 @@
       padding: 16px 20px;
     }
 
+    @media (max-width: 768px) {
+      .cerrada-header {
+        padding: 12px 16px;
+      }
+      
+      .cerrada-header h3 {
+        font-size: 16px;
+      }
+      
+      .cerrada-header small {
+        font-size: 11px;
+      }
+    }
+
     .cerrada-badge {
       background: var(--color-secondary);
       color: white;
@@ -797,6 +834,14 @@
       border-radius: 999px;
       font-size: 11px;
       font-weight: 600;
+      white-space: nowrap;
+    }
+
+    @media (max-width: 480px) {
+      .cerrada-badge {
+        font-size: 10px;
+        padding: 3px 8px;
+      }
     }
 
     .cerrada-metrics {
@@ -806,10 +851,28 @@
       padding: 20px;
     }
 
+    @media (max-width: 768px) {
+      .cerrada-metrics {
+        grid-template-columns: 1fr;
+        gap: 12px;
+        padding: 16px;
+      }
+    }
+
     .cerrada-metric {
       text-align: center;
-      padding: 16px;
+      padding: 16px 12px;
       border-radius: var(--radius-md);
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    @media (max-width: 768px) {
+      .cerrada-metric {
+        padding: 14px 12px;
+      }
     }
 
     .cerrada-metric.primary { background: var(--color-primary-light); }
@@ -820,17 +883,28 @@
       font-size: 12px;
       font-weight: 600;
       margin-bottom: 8px;
+      word-break: break-word;
     }
 
     .cerrada-metric-value {
       font-size: 24px;
       font-weight: 700;
+      line-height: 1.2;
+      margin-bottom: 4px;
+      word-break: break-word;
+    }
+
+    @media (max-width: 768px) {
+      .cerrada-metric-value {
+        font-size: 20px;
+      }
     }
 
     .cerrada-metric-sub {
       font-size: 11px;
       color: var(--color-muted);
       margin-top: 4px;
+      word-break: break-word;
     }
 
     .cerrada-details {
@@ -843,6 +917,20 @@
       font-size: 13px;
     }
 
+    @media (max-width: 768px) {
+      .cerrada-details {
+        grid-template-columns: 1fr;
+        gap: 12px;
+        padding: 16px;
+      }
+      
+      .cerrada-details div {
+        padding: 8px;
+        background: white;
+        border-radius: var(--radius-md);
+      }
+    }
+
     .cerrada-logro {
       padding: 12px 20px;
       background: linear-gradient(90deg, #FEF3C7, #FDE68A);
@@ -853,6 +941,14 @@
       color: #92400E;
       font-weight: 600;
       font-size: 13px;
+      flex-wrap: wrap;
+    }
+
+    @media (max-width: 768px) {
+      .cerrada-logro {
+        padding: 10px 16px;
+        font-size: 12px;
+      }
     }
 
     /* ========= LOGROS ========= */
@@ -965,6 +1061,7 @@
     .mb-4 { margin-bottom: 16px; }
     .text-center { text-align: center; }
     .text-muted { color: var(--color-muted); }
+    .word-break { word-break: break-word; }
 
     /* ========= FORM CONTROL PARA INPUTS READONLY ========= */
     .form-control {
@@ -1396,9 +1493,9 @@ footer .container {
       <div class="logros-grid" id="logrosContainer"></div>
     </div>
 
-    <!-- ========= HISTÓRICO MEJORADO ========= -->
+    <!-- ========= HISTÓRICO MEJORADO - TOTALMENTE RESPONSIVE ========= -->
     <div class="card">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap: wrap; gap: 12px;">
         <h2 class="card-title" style="margin:0;">
           <i class="fas fa-archive"></i> Histórico de obligaciones cerradas
         </h2>
@@ -1407,7 +1504,7 @@ footer .container {
         </button>
       </div>
       
-      <!-- Estadísticas resumidas -->
+      <!-- Estadísticas resumidas - Totalmente responsive -->
       <div class="historico-stats">
         <div class="stat-item">
           <div class="stat-value" style="color: var(--color-primary);" id="totalCerradas">0</div>
@@ -1427,7 +1524,7 @@ footer .container {
         </div>
       </div>
 
-      <!-- Listado detallado -->
+      <!-- Listado detallado - Totalmente responsive -->
       <div id="cerradasListado" style="max-height: 500px; overflow-y: auto;"></div>
     </div>
 
@@ -1775,8 +1872,10 @@ footer .container {
         for (let i = 0; i < maxMeses; i++) {
           if (saldo <= 0) break;
           const interesPeriodo = saldo * em;
-          const amortizacion = Math.max(0, valorCuota - interesPeriodo);
-          if (amortizacion <= 0) break;
+          // Si el saldo es menor que la cuota, la cuota se ajusta al saldo
+          const pagoCuota = Math.min(valorCuota, saldo + interesPeriodo);
+          const amortizacion = Math.max(0, pagoCuota - interesPeriodo);
+          if (amortizacion <= 0 && saldo > 0) break;
           saldo -= amortizacion;
           interesesAcum += interesPeriodo;
           meses++;
@@ -1790,11 +1889,17 @@ footer .container {
 
         const cuotasRestantes = Math.max(0, ob.cantidadCuotas - ob.numeroCuota + 1);
         
+        // Interés del período actual
         const interesPeriodo = ob.saldoActual * em;
-        const amortizacionCuota = Math.max(0, ob.valorCuota - interesPeriodo);
+        // Pago de cuota normal (sin abono extra)
+        const pagoCuotaNormal = Math.min(ob.valorCuota, ob.saldoActual + interesPeriodo);
+        const amortizacionCuota = Math.max(0, pagoCuotaNormal - interesPeriodo);
         const saldoTrasCuota = Math.max(0, ob.saldoActual - amortizacionCuota);
+        
+        // Aplicar abono extra después de la cuota (puede ser 0)
         const saldoTrasAbono = Math.max(0, saldoTrasCuota - montoAbono);
 
+        // Simular escenarios con ajuste automático de cuota cuando saldo es menor
         const base = simularIntereses(saldoTrasCuota, em, ob.valorCuota);
         const conAbono = simularIntereses(saldoTrasAbono, em, ob.valorCuota);
 
@@ -1807,7 +1912,17 @@ footer .container {
         if (modoRecalculo === 'mantener_plazo') {
           nuevoPlazo = Math.max(1, cuotasRestantes - 1);
           if (saldoTrasAbono > 0 && nuevoPlazo > 0) {
-            nuevaCuota = Math.round((saldoTrasAbono * em) / (1 - Math.pow(1 + em, -nuevoPlazo)));
+            // Si el saldo es menor que la cuota original, la nueva cuota será el saldo
+            if (saldoTrasAbono < ob.valorCuota) {
+              nuevaCuota = saldoTrasAbono;
+            } else {
+              nuevaCuota = Math.round((saldoTrasAbono * em) / (1 - Math.pow(1 + em, -nuevoPlazo)));
+            }
+          }
+        } else {
+          // En modo mantener cuota, si el saldo es menor que la cuota, la cuota se ajusta al saldo
+          if (saldoTrasAbono < ob.valorCuota && saldoTrasAbono > 0) {
+            nuevaCuota = saldoTrasAbono;
           }
         }
 
@@ -1818,7 +1933,8 @@ footer .container {
           ahorroIntereses,
           mesesAhorrados,
           nuevaCuota,
-          nuevoPlazo
+          nuevoPlazo,
+          cuotaActualizada: ob.numeroCuota + 1 // La cuota actual aumenta en 1 incluso sin abono
         };
       }
 
@@ -2032,57 +2148,66 @@ footer .container {
         byId('contadorLogros').textContent = `${logrosDesbloqueados.length}/${LOGROS_CONFIG.length}`;
       }
 
-      /* ========= APLICAR ABONO CORREGIDO ========= */
+      /* ========= APLICAR ABONO CORREGIDO - SOPORTA ABONO 0 ========= */
       window.aplicarAbono = function(id) {
         const ob = obligaciones.find(o => o.id === id);
         if (!ob) return;
         
         const abonoInput = byId('abono_' + id);
         const modoSelect = byId('modo_' + id);
-        const montoAbono = Number(abonoInput?.value);
+        const montoAbono = Number(abonoInput?.value) || 0; // Permite 0
         const modoRecalculo = modoSelect?.value || 'mantener_cuota';
 
-        if (!montoAbono || montoAbono <= 0) {
-          notificar('Ingresa un valor de abono mayor a 0', 'warning');
-          return;
-        }
-
+        // Ya no validamos montoAbono > 0, permitimos 0 para pagos normales
         const r = calcularPagoPeriodoYAbono(ob, montoAbono, modoRecalculo);
 
-        ob.saldoActual = r.saldoTrasAbono;
-        ob.numeroCuota = Math.min(ob.cantidadCuotas, ob.numeroCuota + 1);
+        // CORRECCIÓN 1: La cuota actual debe aumentar en 1 (incluso con abono 0)
+        ob.numeroCuota = r.cuotaActualizada;
         
-        if (modoRecalculo === 'mantener_plazo') {
+        // Actualizar saldo
+        ob.saldoActual = r.saldoTrasAbono;
+        
+        // CORRECCIÓN 2: Si el saldo es menor que la cuota, ajustar la cuota al saldo
+        if (r.saldoTrasAbono < ob.valorCuota && r.saldoTrasAbono > 0) {
+          ob.valorCuota = r.saldoTrasAbono;
+        } else if (modoRecalculo === 'mantener_plazo') {
           ob.valorCuota = r.nuevaCuota;
           ob.cantidadCuotas = ob.numeroCuota - 1 + r.nuevoPlazo;
         }
 
-        if (!ob.historicoAbonos) ob.historicoAbonos = [];
-        ob.historicoAbonos.push({
-          fecha: new Date().toLocaleDateString('es-CO'),
-          monto: montoAbono,
-          ahorroIntereses: r.ahorroIntereses,
-          amortizacionCuota: r.amortizacionCuota,
-          interesPeriodo: r.interesPeriodo,
-          saldoPosterior: r.saldoTrasAbono,
-          modoRecalculo,
-          nuevaCuota: r.nuevaCuota,
-          nuevoPlazo: r.nuevoPlazo,
-          mesesAhorrados: r.mesesAhorrados
-        });
+        // Registrar en histórico (solo si hay abono, para no llenar de registros vacíos)
+        if (montoAbono > 0) {
+          if (!ob.historicoAbonos) ob.historicoAbonos = [];
+          ob.historicoAbonos.push({
+            fecha: new Date().toLocaleDateString('es-CO'),
+            monto: montoAbono,
+            ahorroIntereses: r.ahorroIntereses,
+            amortizacionCuota: r.amortizacionCuota,
+            interesPeriodo: r.interesPeriodo,
+            saldoPosterior: r.saldoTrasAbono,
+            modoRecalculo,
+            nuevaCuota: r.nuevaCuota,
+            nuevoPlazo: r.nuevoPlazo,
+            mesesAhorrados: r.mesesAhorrados
+          });
+        }
 
+        // Actualizar UI
         const nuevoSaldoEl = byId('nuevoSaldo_' + id);
         const nuevaCuotaEl = byId('nuevaCuota_' + id);
         const nuevoPlazoEl = byId('nuevoPlazo_' + id);
         const ahorroEl = byId('ahorro_' + id);
         const mesesEl = byId('meses_' + id);
+        const cuotaActualEl = document.querySelector(`[data-id="${id}"] .cuota-actual`);
 
         if (nuevoSaldoEl) nuevoSaldoEl.value = fmtCOP(r.saldoTrasAbono);
-        if (nuevaCuotaEl) nuevaCuotaEl.value = fmtCOP(r.nuevaCuota);
+        if (nuevaCuotaEl) nuevaCuotaEl.value = fmtCOP(ob.valorCuota);
         if (nuevoPlazoEl) nuevoPlazoEl.value = r.nuevoPlazo;
         if (ahorroEl) ahorroEl.value = fmtCOP(r.ahorroIntereses);
         if (mesesEl) mesesEl.textContent = r.mesesAhorrados;
+        if (cuotaActualEl) cuotaActualEl.textContent = `${ob.numeroCuota}/${ob.cantidadCuotas}`;
 
+        // Efecto visual
         const card = document.querySelector(`[data-id="${id}"]`);
         if (card) {
           card.classList.add('highlight-pulse');
@@ -2094,9 +2219,12 @@ footer .container {
         renderizarGrafico();
         verificarLogros();
         
-        notificar(`✅ Ahorraste ${fmtCOP(r.ahorroIntereses)} en intereses`, 'success');
-        
-        if (r.ahorroIntereses > 50000) lanzarConfeti(50);
+        if (montoAbono > 0) {
+          notificar(`✅ Ahorraste ${fmtCOP(r.ahorroIntereses)} en intereses`, 'success');
+          if (r.ahorroIntereses > 50000) lanzarConfeti(50);
+        } else {
+          notificar(`✅ Cuota ${ob.numeroCuota-1} pagada. Nueva cuota: ${ob.numeroCuota}`, 'info');
+        }
       };
 
       /* ========= CERRAR OBLIGACIÓN CORREGIDO ========= */
@@ -2118,7 +2246,8 @@ footer .container {
         const mesesAhorradosTotal = historicoAbonos.reduce((s, a) => s + (a.mesesAhorrados || 0), 0);
         
         const cuotasPendientesInicial = Math.max(0, (ob.cantidadCuotasOriginal || ob.cantidadCuotas) - (ob.cuotaInicial || 1) + 1);
-        const cuotasDejadasDePagar = Math.max(0, cuotasPendientesInicial - numeroAbonos);
+        const cuotasPagadas = ob.numeroCuota - ob.cuotaInicial;
+        const cuotasDejadasDePagar = Math.max(0, cuotasPendientesInicial - cuotasPagadas);
         
         const cerrada = {
           id: crypto.randomUUID(),
@@ -2194,24 +2323,24 @@ footer .container {
               <div><b>Saldo</b><br>${fmtCOP(ob.saldoActual)}</div>
               <div><b>Cuota</b><br>${fmtCOP(ob.valorCuota)}</div>
               <div><b>Interés</b><br>${ob.interesEA}%</div>
-              <div><b>Cuota</b><br>${ob.numeroCuota}/${ob.cantidadCuotas}</div>
+              <div><b>Cuota</b><br><span class="cuota-actual">${ob.numeroCuota}/${ob.cantidadCuotas}</span></div>
             </div>
 
             <div class="grid grid-3">
-              <input type="number" id="abono_${ob.id}" class="form-control" placeholder="Abono extra" value="50000">
+              <input type="number" id="abono_${ob.id}" class="form-control" placeholder="Abono extra (0 para pago normal)" value="0" min="0">
               <select id="modo_${ob.id}" class="form-control">
                 <option value="mantener_cuota">Mantener cuota (menos plazo)</option>
                 <option value="mantener_plazo">Mantener plazo (cuota menor)</option>
               </select>
               <button class="btn btn-secondary" onclick="aplicarAbono('${ob.id}')">
-                <i class="fas fa-check"></i> Pagar
+                <i class="fas fa-check"></i> Pagar cuota
               </button>
             </div>
 
             <div class="grid grid-4" style="margin-top:16px; background:var(--color-bg); padding:12px; border-radius:var(--radius-md);">
               <div><b>Nuevo saldo:</b> <input type="text" readonly class="form-control" id="nuevoSaldo_${ob.id}" value="${fmtCOP(ob.saldoActual)}"></div>
               <div><b>Nueva cuota:</b> <input type="text" readonly class="form-control" id="nuevaCuota_${ob.id}" value="${fmtCOP(ob.valorCuota)}"></div>
-              <div><b>Plazo:</b> <input type="text" readonly class="form-control" id="nuevoPlazo_${ob.id}" value="${plazoRestante}"></div>
+              <div><b>Plazo restante:</b> <input type="text" readonly class="form-control" id="nuevoPlazo_${ob.id}" value="${plazoRestante}"></div>
               <div><b>Ahorro:</b> <input type="text" readonly class="form-control" id="ahorro_${ob.id}" value="$0"></div>
             </div>
             <div class="grid grid-4" style="margin-top:8px; font-size:12px; color:var(--color-muted);">
@@ -2222,7 +2351,7 @@ footer .container {
         `}).join('');
       }
 
-      /* ========= RENDERIZADO HISTÓRICO CORREGIDO ========= */
+      /* ========= RENDERIZADO HISTÓRICO CORREGIDO - TOTALMENTE RESPONSIVE ========= */
       function renderCerradas() {
         const container = byId('cerradasListado');
         
@@ -2262,9 +2391,9 @@ footer .container {
           return `
             <div class="cerrada-card">
               <div class="cerrada-header">
-                <div style="display:flex; justify-content:space-between; align-items:center;">
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap: wrap; gap: 10px;">
                   <div>
-                    <h3 style="margin:0; display:flex; align-items:center; gap:8px;">
+                    <h3 style="margin:0; display:flex; align-items:center; gap:8px; flex-wrap: wrap;">
                       <i class="fas fa-check-circle" style="color:var(--color-secondary);"></i>
                       ${c.entidad}
                     </h3>
