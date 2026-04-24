@@ -9,12 +9,76 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
   <link rel="stylesheet" href="assets/css/main.css" />
 </head>
 <body>
+  <div id="authScreen" class="auth-screen">
+    <div class="auth-shell">
+      <div class="auth-hero">
+        <span class="auth-kicker">Bola de Nieve</span>
+        <h2>Accede a tu tablero financiero</h2>
+        <p>Ingresa con Google o crea tu cuenta para conservar tu progreso, controlar sesiones y seguir administrando tus obligaciones sin cambiar la logica actual del sistema.</p>
+        <div class="auth-benefits">
+          <span><i class="fas fa-mobile-alt"></i> Responsive mejorado</span>
+          <span><i class="fas fa-shield-alt"></i> Sesiones seguras</span>
+          <span><i class="fas fa-chart-line"></i> Datos financieros intactos</span>
+        </div>
+      </div>
+      <div class="auth-card">
+        <div class="auth-tabs">
+          <button type="button" class="auth-tab active" data-auth-tab="login">Iniciar sesion</button>
+          <button type="button" class="auth-tab" data-auth-tab="register">Registrarme</button>
+        </div>
+        <div class="auth-google">
+          <p class="auth-helper">Si ya tienes una sesion activa de Google en Chrome, intentaremos usarla automaticamente.</p>
+          <div id="googleLoginContainer" class="google-login-slot"></div>
+          <p id="googleLoginMessage" class="auth-muted"></p>
+        </div>
+        <form id="loginForm" class="auth-form">
+          <div class="form-group">
+            <label for="loginEmail">Correo electronico</label>
+            <input type="email" id="loginEmail" autocomplete="email" required />
+          </div>
+          <div class="form-group">
+            <label for="loginPassword">Contrasena</label>
+            <input type="password" id="loginPassword" autocomplete="current-password" required />
+          </div>
+          <button type="submit" class="btn btn-primary auth-submit">Ingresar</button>
+        </form>
+        <form id="registerForm" class="auth-form hidden">
+          <div class="form-group">
+            <label for="registerEmail">Correo electronico</label>
+            <input type="email" id="registerEmail" autocomplete="email" required />
+          </div>
+          <div class="form-group">
+            <label for="registerPassword">Contrasena segura</label>
+            <input type="password" id="registerPassword" autocomplete="new-password" maxlength="12" required />
+            <small class="field-hint">Usa entre 8 y 12 caracteres con mayuscula, minuscula, numero y caracter especial.</small>
+          </div>
+          <div class="form-group">
+            <label for="registerPasswordConfirm">Confirmar contrasena</label>
+            <input type="password" id="registerPasswordConfirm" autocomplete="new-password" maxlength="12" required />
+          </div>
+          <button type="submit" class="btn btn-primary auth-submit">Crear cuenta</button>
+        </form>
+        <div id="authFeedback" class="auth-feedback hidden"></div>
+      </div>
+    </div>
+  </div>
   <header>
     <div class="container">
-      <h1>💠 Bola de Nieve · Libertad Financiera</h1>
+      <div id="sessionBar" class="session-bar hidden">
+        <div>
+          <strong id="sessionUserName">Usuario</strong>
+          <span id="sessionUserMeta">Sesion activa</span>
+        </div>
+        <div class="session-actions">
+          <button type="button" class="btn btn-sm btn-outline" id="btnDemographics">Datos opcionales</button>
+          <button type="button" class="btn btn-sm btn-secondary" id="btnLogout">Cerrar sesion</button>
+        </div>
+      </div>
+      <h1>❄️ Bola de Nieve · Libertad Financiera</h1>
       <p class="subtitle">Simula, ahorra y libera tus deudas más rápido. </p>
     </div>
   </header>
@@ -23,7 +87,7 @@
     <!-- Notificaciones -->
     <div class="notifications-container" id="notifications"></div>
 
-    <!-- ========= DASHBOARD MÉTRICAS ========= -->
+    <!-- ========= DASHBOARD MÃ‰TRICAS ========= -->
     <div class="dashboard-grid" id="dashboardMetrics">
       <div class="dashboard-card" onclick="filtrarPorMetrica('saldo')">
         <div class="card-icon">💰</div>
@@ -58,7 +122,7 @@
     <div class="dashboard-card" id="libertadCard">
       <div class="card-icon">🎯</div>
       <div class="card-label" data-tooltip="Fecha estimada en que todas tus deudas estarán pagadas">LIBERTAD FINANCIERA</div>
-      <div class="card-value" id="fechaLibertad">--</div>
+      <div class="card-value" id="fechaLibertad">-</div>
       <div class="progress-container">
         <div class="progress-bar" id="progresoLibertad" style="width: 0%"></div>
       </div>
@@ -110,7 +174,7 @@
               <option value="consumo">Consumo</option>
               <option value="tarjeta">Tarjeta de crédito</option>
               <option value="vivienda">Vivienda</option>
-              <option value="vehiculo">Vehículo</option>
+              <option value="vehiculo">vehiculo</option>
               <option value="otros">Otros</option>
             </select>
           </div>
@@ -133,19 +197,61 @@
             </div>
           </div>
           <div id="uvrInfo" class="uvr-info" style="display: none;">
-            <span>💡 UVR hoy: <strong id="uvrValorActual">$385.62</strong></span>
+            <span>💰 UVR hoy: <strong id="uvrValorActual">$385.62</strong></span>
             <span>Actualizado mensualmente</span>
           </div>
+        </div>
+
+        <div id="uvrCamposContainer" class="uvr-panel" style="display:none;">
+          <div class="grid grid-3">
+            <div class="form-group">
+              <label>Fecha desembolso</label>
+              <input type="date" id="fechaDesembolsoUVR" />
+              <small class="field-hint">Opcional. Si la omites, se usa la fecha actual.</small>
+            </div>
+            <div class="form-group">
+              <label>Inflacion esperada EA %</label>
+              <input type="number" id="inflacionEsperadaEA" min="-2" max="60" step="0.01" value="5.2" />
+              <small class="field-hint">Valor sugerido: 5.2%.</small>
+            </div>
+            <div class="form-group">
+              <label>UVR actual / base</label>
+              <div class="uvr-inline-actions">
+                <input type="number" id="uvrManual" min="1" step="0.0001" value="385.6200" />
+                <button type="button" class="btn btn-outline btn-sm" id="btnConsultarUVR">
+                  <i class="fas fa-sync-alt"></i> Consultar
+                </button>
+              </div>
+              <small class="field-hint">Editable manualmente si la API no esta disponible.</small>
+            </div>
+          </div>
+
+          <div class="grid grid-3">
+            <div class="form-group">
+              <label>Equivalencia del saldo en UVR</label>
+              <input type="text" id="equivalenciaCreditoUVR" readonly />
+            </div>
+            <div class="form-group">
+              <label>Cuota fija UVR estimada</label>
+              <input type="text" id="cuotaCalculadaUVR" readonly />
+            </div>
+            <div class="form-group">
+              <label>Cuota estimada primer mes (COP)</label>
+              <input type="text" id="cuotaEstimadaCOPUVR" readonly />
+            </div>
+          </div>
+
+          <div id="uvrWarningBox" class="inline-warning" style="display:none;"></div>
         </div>
 
         <div class="grid grid-3">
           <div class="form-group">
             <label>Valor crédito</label>
-            <input type="number" id="valorCredito" min="0" step="1" placeholder="Ej: 15000000" required />
+            <input type="text" id="valorCredito" inputmode="numeric" placeholder="Ej: 15.000.000" required />
           </div>
-          <div class="form-group">
+          <div class="form-group" id="grupoValorCuota">
             <label>Valor cuota</label>
-            <input type="number" id="valorCuota" min="0" step="1" placeholder="Ej: 450000" required />
+            <input type="text" id="valorCuota" inputmode="numeric" placeholder="Ej: 450.000" required />
           </div>
           <div class="form-group">
             <label>Interés EA %</label>
@@ -273,13 +379,13 @@
   <div class="container">
     <!-- TODO EL CONTENIDO DEL FOOTER (columnas, etc) -->
    
-    <!-- Línea divisoria -->
+    <!-- LÃ­nea divisoria -->
     <div style="height: 1px; background: rgba(255,255,255,0.2); margin: 30px 0;"></div>
 
     <!-- Footer inferior -->
     <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 20px;">
       <div style="font-size: 13px; opacity: 0.7;">
-        <span>Hecho en Colombia con 💙 por </span>
+        <span>Hecho en Colombia con ðŸ’™ por </span>
         <strong style="color: white;">Cristian Piamba</strong>
       </div>
       
@@ -424,12 +530,117 @@
   </div>
 
   <script src="assets/js/app.js"></script>
-  <!-- ========= MODAL DE INFORMACIÓN LEGAL ========= -->
+  <!-- ========= MODAL DE INFORMACIÃ“N LEGAL ========= -->
 <div id="modalLegal" class="modal-info" onclick="if(event.target===this) cerrarModalLegal()">
   <div class="modal-info-content">
     <button class="modal-info-close" onclick="cerrarModalLegal()">&times;</button>
     <div id="modalLegalContenido" class="modal-contenido"></div>
   </div>
 </div>
+
+<div id="demographicsModal" class="modal-info" onclick="if(event.target===this) cerrarDemografia()">
+  <div class="modal-info-content demographics-modal-content">
+    <button class="modal-info-close" onclick="cerrarDemografia()">&times;</button>
+    <div class="modal-contenido">
+      <h2><i class="fas fa-users"></i> Datos demograficos opcionales</h2>
+      <p class="fecha">Puedes omitir esta informacion. Solo se guardara con fines estadisticos y no afecta los modulos financieros.</p>
+      <form id="demographicsForm" class="modal-contacto-form">
+        <div class="grid grid-2 demographics-grid">
+          <div class="form-group">
+            <label for="demoEdad">Edad</label>
+            <select id="demoEdad">
+              <option value="">Prefiero omitir</option>
+              <option value="18-24">18-24</option>
+              <option value="25-34">25-34</option>
+              <option value="35-44">35-44</option>
+              <option value="45-54">45-54</option>
+              <option value="55+">55+</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="demoGenero">Sexo / genero</label>
+            <select id="demoGenero">
+              <option value="">Prefiero omitir</option>
+              <option value="Masculino">Masculino</option>
+              <option value="Femenino">Femenino</option>
+              <option value="Otro">Otro</option>
+              <option value="Prefiero no decirlo">Prefiero no decirlo</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="demoSalario">Escala salarial</label>
+            <select id="demoSalario">
+              <option value="">Prefiero omitir</option>
+              <option value="Menos de 1 SMMLV">Menos de 1 SMMLV</option>
+              <option value="1-2 SMMLV">1-2 SMMLV</option>
+              <option value="2-4 SMMLV">2-4 SMMLV</option>
+              <option value="4-8 SMMLV">4-8 SMMLV</option>
+              <option value="Mas de 8 SMMLV">Mas de 8 SMMLV</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="demoOcupacion">Ocupacion</label>
+            <select id="demoOcupacion">
+              <option value="">Prefiero omitir</option>
+              <option value="Asalariado">Asalariado</option>
+              <option value="Independiente">Independiente</option>
+              <option value="Pensionado">Pensionado</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="demoEscolaridad">Escolaridad</label>
+            <select id="demoEscolaridad">
+              <option value="">Prefiero omitir</option>
+              <option value="Bachiller">Bachiller</option>
+              <option value="Tecnico">Tecnico</option>
+              <option value="Tecnologo">Tecnologo</option>
+              <option value="Universitario">Universitario</option>
+              <option value="Postgrado">Postgrado</option>
+            </select>
+          </div>
+        </div>
+        <div class="demographics-actions">
+          <button type="submit" class="btn btn-primary">Guardar datos</button>
+          <button type="button" class="btn btn-outline" id="btnSkipDemographics">Omitir por ahora</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+  <div id="modalProyeccionUVR" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2><i class="fas fa-chart-line"></i> Proyeccion de cuota en pesos</h2>
+        <button class="modal-close" onclick="cerrarProyeccionUVR()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="projection-summary" id="proyeccionUVRResumen"></div>
+        <div class="inline-warning" id="proyeccionUVRAdvertencia">
+          La inflacion es variable. Esta proyeccion es un estimado.
+        </div>
+        <div class="projection-chart-shell">
+          <canvas id="graficoProyeccionUVR" style="max-height:260px; width:100%;"></canvas>
+        </div>
+        <div class="projection-table-shell">
+          <table class="projection-table">
+            <thead>
+              <tr>
+                <th>Mes</th>
+                <th>Fecha</th>
+                <th>UVR proyectada</th>
+                <th>Cuota UVR</th>
+                <th>Cuota pesos</th>
+              </tr>
+            </thead>
+            <tbody id="proyeccionUVRBody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="cerrarProyeccionUVR()">Cerrar</button>
+      </div>
+    </div>
+  </div>
 </body>
 </html>
