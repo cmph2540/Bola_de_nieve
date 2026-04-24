@@ -382,7 +382,7 @@
           uvrFuenteActual = 'manual';
           renderizarValorUVRActual();
           if (typeof window.notificar === 'function') {
-            window.notificar('No hay API UVR configurada. Puedes editar el valor manualmente.', 'info');
+            window.notificar('La conexion de la api esta en proceso. Puedes editar el valor manualmente.', 'info');
           }
           return uvrActual;
         }
@@ -1183,7 +1183,7 @@
         if (nuevos.length > 0) {
           logrosDesbloqueados.push(...nuevos);
           guardarLogros();
-          nuevos.forEach(l => notificar(`ðŸ† Logro: ${LOGROS_CONFIG.find(x => x.id === l).nombre}`, 'success'));
+          nuevos.forEach(l => notificar(`🎉 Logro: ${LOGROS_CONFIG.find(x => x.id === l).nombre}`, 'success'));
           lanzarConfeti(50);
         }
         renderizarLogros();
