@@ -44,7 +44,7 @@
     }
 
     header::after {
-      content: 'ðŸ’°';
+      content: '❄️;
       position: absolute;
       right: 20px;
       bottom: -10px;
@@ -1232,7 +1232,7 @@ footer .container {
     text-align: center;
   }
 }
-/* ========= MODALES DE INFORMACIÃ“N LEGAL ========= */
+/* ========= MODALES DE INFORMACIÓN LEGAL ========= */
 .modal-info {
   display: none;
   position: fixed;
