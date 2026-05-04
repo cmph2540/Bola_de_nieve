@@ -66,6 +66,10 @@
       let monedaSeleccionada = 'COP'; // COP o UVR
       let graficoProyeccionUVR = null;
       let obligacionEditandoId = null;
+      let obligacionPendienteEliminarId = null;
+      let ultimoAjusteDashboard = null;
+
+      const EDITION_HISTORY_MAX_SALDO_VARIATION = 0.35;
 
       // Utilidades
       const fmtCOP = (v) => new Intl.NumberFormat('es-CO', { 
@@ -512,6 +516,131 @@
         return Number(abono.ahorroInteresesCOPReales || 0);
       }
 
+      function obtenerSaldoEdicionCOP(ob) {
+        if (!esCreditoUVR(ob)) return Number(ob?.saldoActual || 0);
+        const valorUVRBase = sanearValorUvr(ob?.uvr?.valorUVRBase || ob?.uvr?.valorUVRActual || uvrActual);
+        return roundTo(uvrToCop(Number(ob?.saldoActual || 0), valorUVRBase), 2);
+      }
+
+      function obtenerValorCreditoBaseCOP(ob) {
+        if (!esCreditoUVR(ob)) return Number(ob?.valorCredito || ob?.saldoActual || 0);
+        const valorUVRBase = sanearValorUvr(ob?.uvr?.valorUVRBase || ob?.uvr?.valorUVRActual || uvrActual);
+        return roundTo(uvrToCop(Number(ob?.valorCredito || ob?.saldoActual || 0), valorUVRBase), 2);
+      }
+
+      function obtenerMetricasObligacionActiva(ob) {
+        const historico = ob?.historicoAbonos || [];
+        return historico.reduce((acc, abono) => {
+          acc.intereses += obtenerAhorroInteresesCOP(ob, abono);
+          acc.capital += obtenerMontoAbonoCOP(ob, abono);
+          acc.cuotas += Number(abono?.mesesAhorrados || 0);
+          return acc;
+        }, { intereses: 0, capital: 0, cuotas: 0 });
+      }
+
+      function normalizarObligacionCerrada(cerrada) {
+        if (!cerrada) return cerrada;
+
+        const moneda = cerrada.moneda || 'COP';
+        const referenciaObligacion = normalizarObligacionUVR({
+          id: cerrada.id || crypto.randomUUID(),
+          entidad: cerrada.entidad || '',
+          tipoCredito: cerrada.tipoCredito || (moneda === 'UVR' ? 'vivienda' : 'otros'),
+          moneda,
+          saldoActual: Number(cerrada.saldoFinal || 0),
+          valorCredito: Number(cerrada.valorCreditoOriginal || cerrada.saldoFinal || 0),
+          valorCuota: 0,
+          interesEA: Number(cerrada.interesEA || 0),
+          numeroCuota: 1,
+          cantidadCuotas: 1,
+          historicoAbonos: cerrada.historicoAbonos || [],
+          uvr: cerrada.uvr
+        });
+
+        const historicoAbonos = (cerrada.historicoAbonos || []).map((abono) => normalizarAbonoHistorico(referenciaObligacion, abono));
+        const totalAbonosCOP = esNumeroFinito(cerrada.totalAbonosCOP)
+          ? Number(cerrada.totalAbonosCOP)
+          : historicoAbonos.reduce((sum, abono) => sum + obtenerMontoAbonoCOP(referenciaObligacion, abono), 0);
+        const totalInteresesCOP = esNumeroFinito(cerrada.interesesDejadosDePagarCOP)
+          ? Number(cerrada.interesesDejadosDePagarCOP)
+          : historicoAbonos.reduce((sum, abono) => sum + obtenerAhorroInteresesCOP(referenciaObligacion, abono), 0);
+        const capitalAmortizado = esNumeroFinito(cerrada.capitalAmortizado)
+          ? Number(cerrada.capitalAmortizado)
+          : totalAbonosCOP;
+        const totalAbonosUVR = moneda === 'UVR'
+          ? (esNumeroFinito(cerrada.totalAbonosUVR)
+            ? Number(cerrada.totalAbonosUVR)
+            : historicoAbonos.reduce((sum, abono) => sum + Number(abono?.montoAbonoUVR || 0), 0))
+          : 0;
+        const interesesDejadosDePagarUVR = moneda === 'UVR'
+          ? (esNumeroFinito(cerrada.interesesDejadosDePagarUVR)
+            ? Number(cerrada.interesesDejadosDePagarUVR)
+            : historicoAbonos.reduce((sum, abono) => sum + Number(abono?.ahorroInteresesUVR || 0), 0))
+          : 0;
+        const valorCreditoOriginalCOP = esNumeroFinito(cerrada.valorCreditoOriginalCOP)
+          ? Number(cerrada.valorCreditoOriginalCOP)
+          : (moneda === 'UVR'
+            ? roundTo(uvrToCop(
+                Number(cerrada.valorCreditoOriginal || 0),
+                sanearValorUvr(cerrada?.uvr?.valorUVRBase || referenciaObligacion?.uvr?.valorUVRBase || uvrActual)
+              ), 2)
+            : Number(cerrada.valorCreditoOriginal || 0));
+
+        return {
+          ...cerrada,
+          moneda,
+          historicoAbonos,
+          totalAbonosCOP,
+          totalAbonosUVR,
+          interesesDejadosDePagar: totalInteresesCOP,
+          interesesDejadosDePagarCOP: totalInteresesCOP,
+          interesesDejadosDePagarUVR,
+          capitalAmortizado,
+          valorCreditoOriginalCOP
+        };
+      }
+
+      function obtenerMetricasObligacionCerrada(cerrada) {
+        const cerradaNormalizada = normalizarObligacionCerrada(cerrada);
+        return {
+          intereses: Number(cerradaNormalizada?.interesesDejadosDePagarCOP || cerradaNormalizada?.interesesDejadosDePagar || 0),
+          capital: Number(cerradaNormalizada?.capitalAmortizado || cerradaNormalizada?.totalAbonosCOP || 0),
+          cuotas: Number(cerradaNormalizada?.cuotasDejadasDePagar || 0)
+        };
+      }
+
+      function calcularVariacionSaldoEdicion(obAnterior, obEditada) {
+        const saldoAnteriorCOP = obtenerSaldoEdicionCOP(obAnterior);
+        const saldoNuevoCOP = obtenerSaldoEdicionCOP(obEditada);
+        const diferenciaCOP = Math.abs(saldoNuevoCOP - saldoAnteriorCOP);
+        const ratio = saldoAnteriorCOP > 0 ? diferenciaCOP / saldoAnteriorCOP : (diferenciaCOP > 0 ? 1 : 0);
+
+        return {
+          saldoAnteriorCOP,
+          saldoNuevoCOP,
+          diferenciaCOP,
+          ratio
+        };
+      }
+
+      function evaluarPreservacionHistoricoEdicion(obAnterior, obEditada) {
+        const historico = obAnterior?.historicoAbonos || [];
+        if (historico.length === 0) {
+          return { preserve: true, reason: 'sin_historico', ratio: 0, diferenciaCOP: 0 };
+        }
+
+        if (obAnterior?.moneda !== obEditada?.moneda || obAnterior?.tipoCredito !== obEditada?.tipoCredito) {
+          return { preserve: false, reason: 'estructura', ...calcularVariacionSaldoEdicion(obAnterior, obEditada) };
+        }
+
+        const variacion = calcularVariacionSaldoEdicion(obAnterior, obEditada);
+        return {
+          preserve: variacion.ratio <= EDITION_HISTORY_MAX_SALDO_VARIATION,
+          reason: variacion.ratio <= EDITION_HISTORY_MAX_SALDO_VARIATION ? 'saldo_estable' : 'saldo_alterado',
+          ...variacion
+        };
+      }
+
       window.toggleMonedaVivienda = function() {
         actualizarVisibilidadCamposUVR();
       };
@@ -569,7 +698,8 @@
               historicoAbonos: o.historicoAbonos || [],
               moneda: o.moneda || 'COP'
             }));
-          obligacionesCerradas = JSON.parse(localStorage.getItem(STORAGE_KEYS.OBLIGACIONES_CERRADAS) || '[]');
+          obligacionesCerradas = JSON.parse(localStorage.getItem(STORAGE_KEYS.OBLIGACIONES_CERRADAS) || '[]')
+            .map((cerrada) => normalizarObligacionCerrada(cerrada));
         } catch (e) {
           obligaciones = [];
           obligacionesCerradas = [];
@@ -910,26 +1040,28 @@
         const saldoTotalCOP = activas.reduce((sum, ob) => {
           return sum + (esCreditoUVR(ob) ? obtenerSaldoActualCOP(ob) : Number(ob.saldoActual || 0));
         }, 0);
-        
-        const interesesActivas = obligaciones.reduce((sum, ob) => 
-          sum + (ob.historicoAbonos?.reduce((s, a) => {
-            return s + obtenerAhorroInteresesCOP(ob, a);
-          }, 0) || 0), 0);
-        const interesesCerradas = obligacionesCerradas.reduce((sum, c) => sum + (c.interesesDejadosDePagar || 0), 0);
-        
-        const capitalActivas = obligaciones.reduce((sum, ob) => 
-          sum + (ob.historicoAbonos?.reduce((s, a) => {
-            return s + obtenerMontoAbonoCOP(ob, a);
-          }, 0) || 0), 0);
-        
-        const cuotasTotales = obligacionesCerradas.reduce((sum, c) => sum + (c.cuotasDejadasDePagar || 0), 0) +
-          obligaciones.reduce((sum, ob) => sum + (ob.historicoAbonos?.reduce((s, a) => s + (a.mesesAhorrados || 0), 0) || 0), 0);
+
+        const metricasActivas = obligaciones.reduce((acc, ob) => {
+          const metricas = obtenerMetricasObligacionActiva(ob);
+          acc.intereses += metricas.intereses;
+          acc.capital += metricas.capital;
+          acc.cuotas += metricas.cuotas;
+          return acc;
+        }, { intereses: 0, capital: 0, cuotas: 0 });
+
+        const metricasCerradas = obligacionesCerradas.reduce((acc, cerrada) => {
+          const metricas = obtenerMetricasObligacionCerrada(cerrada);
+          acc.intereses += metricas.intereses;
+          acc.capital += metricas.capital;
+          acc.cuotas += metricas.cuotas;
+          return acc;
+        }, { intereses: 0, capital: 0, cuotas: 0 });
 
         return {
           saldoTotal: saldoTotalCOP,
-          interesesTotales: interesesActivas + interesesCerradas,
-          capitalTotal: capitalActivas,
-          cuotasTotales
+          interesesTotales: metricasActivas.intereses + metricasCerradas.intereses,
+          capitalTotal: metricasActivas.capital + metricasCerradas.capital,
+          cuotasTotales: metricasActivas.cuotas + metricasCerradas.cuotas
         };
       }
 
@@ -939,17 +1071,42 @@
         byId('totalInteresesAhorrados').textContent = fmtCOP(m.interesesTotales);
         byId('totalCapitalAmortizado').textContent = fmtCOP(m.capitalTotal);
         byId('totalCuotasEvitadas').textContent = m.cuotasTotales;
+        renderizarAjusteDashboard();
         actualizarProyeccionLibertad();
       }
 
       /* ========= LIBERTAD FINANCIERA ========= */
+      function calcularProgresoDeudaCero() {
+        const saldoActualCOP = obligaciones
+          .filter((ob) => Number(ob?.saldoActual || 0) > 0)
+          .reduce((sum, ob) => sum + (esCreditoUVR(ob) ? obtenerSaldoActualCOP(ob) : Number(ob.saldoActual || 0)), 0);
+        const baseActivasCOP = obligaciones.reduce((sum, ob) => {
+          return sum + Math.max(
+            esCreditoUVR(ob) ? obtenerValorCreditoBaseCOP(ob) : Number(ob.valorCredito || 0),
+            esCreditoUVR(ob) ? obtenerSaldoActualCOP(ob) : Number(ob.saldoActual || 0)
+          );
+        }, 0);
+        const baseCerradasCOP = obligacionesCerradas.reduce((sum, cerrada) => {
+          const cerradaNormalizada = normalizarObligacionCerrada(cerrada);
+          return sum + Number(cerradaNormalizada?.valorCreditoOriginalCOP || 0);
+        }, 0);
+        const baseTotalCOP = baseActivasCOP + baseCerradasCOP;
+
+        if (baseTotalCOP <= 0) {
+          return obligacionesCerradas.length > 0 ? 100 : 0;
+        }
+
+        const progreso = ((baseTotalCOP - saldoActualCOP) / baseTotalCOP) * 100;
+        return Math.min(100, Math.max(0, progreso));
+      }
+
       function calcularFechaLibertad() {
         const activas = obligaciones.filter(ob => ob.saldoActual > 0);
         
         if (activas.length === 0) {
           return { 
             fecha: '--', 
-            progreso: 0, 
+            progreso: obligacionesCerradas.length > 0 ? 100 : 0, 
             esLibre: false,
             mensajeDetalle: '💰 Sin deudas activas'
           };
@@ -1005,7 +1162,7 @@
         
         return {
           fecha: fecha.toLocaleDateString('es-CO', { year: 'numeric', month: 'long' }),
-          progreso: Math.min(100, Math.max(0, progreso)),
+          progreso: calcularProgresoDeudaCero(),
           esLibre: false,
           mensajeDetalle: `💰 ${fmtCOP(saldoTotalCOP)} · ${activas.length} deuda(s)`
         };
@@ -1253,9 +1410,15 @@
 
         const historicoAbonos = ob.historicoAbonos || [];
         const numeroAbonos = historicoAbonos.length;
-        const totalAbonos = historicoAbonos.reduce((s, a) => s + (a.monto || 0), 0);
-        const totalInteresesDejados = historicoAbonos.reduce((s, a) => s + (a.ahorroIntereses || 0), 0);
-        const capitalAmortizado = historicoAbonos.reduce((s, a) => s + (a.amortizacionCuota || 0), 0);
+        const totalAbonosCOP = historicoAbonos.reduce((s, a) => s + obtenerMontoAbonoCOP(ob, a), 0);
+        const totalInteresesDejadosCOP = historicoAbonos.reduce((s, a) => s + obtenerAhorroInteresesCOP(ob, a), 0);
+        const totalAbonosUVR = esCreditoUVR(ob)
+          ? historicoAbonos.reduce((s, a) => s + Number(a.montoAbonoUVR || 0), 0)
+          : 0;
+        const totalInteresesDejadosUVR = esCreditoUVR(ob)
+          ? historicoAbonos.reduce((s, a) => s + Number(a.ahorroInteresesUVR || 0), 0)
+          : 0;
+        const capitalAmortizado = totalAbonosCOP;
         const interesPeriodoTotal = historicoAbonos.reduce((s, a) => s + (a.interesPeriodo || 0), 0);
         const mesesAhorradosTotal = historicoAbonos.reduce((s, a) => s + (a.mesesAhorrados || 0), 0);
         
@@ -1270,20 +1433,26 @@
           moneda: ob.moneda || 'COP',
           fechaCierre: new Date().toLocaleString('es-CO'),
           valorCreditoOriginal: ob.valorCredito,
+          valorCreditoOriginalCOP: esCreditoUVR(ob) ? obtenerValorCreditoBaseCOP(ob) : Number(ob.valorCredito || 0),
           saldoFinal: ob.saldoActual,
           interesEA: ob.interesEA,
           numeroAbonos: numeroAbonos,
-          totalAbonos: totalAbonos,
-          interesesDejadosDePagar: totalInteresesDejados,
+          totalAbonos: totalAbonosCOP,
+          totalAbonosCOP: totalAbonosCOP,
+          totalAbonosUVR,
+          interesesDejadosDePagar: totalInteresesDejadosCOP,
+          interesesDejadosDePagarCOP: totalInteresesDejadosCOP,
+          interesesDejadosDePagarUVR: totalInteresesDejadosUVR,
           cuotasDejadasDePagar: cuotasDejadasDePagar,
           historicoAbonos: historicoAbonos,
           capitalAmortizado: capitalAmortizado,
           interesPeriodoTotal: interesPeriodoTotal,
           mesesAhorradosTotal: mesesAhorradosTotal,
-          creadoAt: ob.creadoAt
+          creadoAt: ob.creadoAt,
+          uvr: ob.uvr
         };
 
-        obligacionesCerradas.push(cerrada);
+        obligacionesCerradas.push(normalizarObligacionCerrada(cerrada));
         obligaciones = obligaciones.filter(o => o.id !== id);
         
         guardarDatos();
@@ -1293,8 +1462,8 @@
         let mensaje = `🎉 ¡Felicidades! Cerraste ${ob.entidad}`;
         if (cuotasDejadasDePagar >= 12) {
           mensaje += ` y evitaste ${cuotasDejadasDePagar} cuotas! 🏆`;
-        } else if (totalInteresesDejados > 100000) {
-          mensaje += ` con un ahorro de ${fmtMonto(totalInteresesDejados, ob.moneda)}! 💰`;
+        } else if (totalInteresesDejadosCOP > 100000) {
+          mensaje += ` con un ahorro de ${fmtCOP(totalInteresesDejadosCOP)}! 💰`;
         }
         
         notificar(mensaje, 'success');
@@ -1332,29 +1501,39 @@
             : '<span class="badge badge-primary"><i class="fas fa-coins"></i> COP</span>';
           
           return `
-          <div class="card" data-id="${ob.id}">
-            <div class="flex justify-between">
-              <div>
+          <div class="card obligacion-card" data-id="${ob.id}">
+            <div class="obligacion-header">
+              <div class="obligacion-heading">
                 <h3>${ob.entidad} <span class="badge badge-success">${ob.tipoCredito}</span> ${monedaBadge}</h3>
                 <small><i class="far fa-calendar-alt"></i> Vence: ${ob.fechaProximoVencimiento}</small>
               </div>
-              <div class="flex gap-2">
-                <span class="badge badge-primary"><i class="fas fa-piggy-bank"></i> ${fmtMonto(interesesAcum, ob.moneda)}</span>
-                ${esCreditoUVR(ob) ? `<button class="btn btn-sm btn-outline" onclick="abrirProyeccionUVR('${ob.id}')"><i class="fas fa-chart-line"></i> Proyeccion</button>` : ''}
-                <button class="btn btn-sm btn-outline" onclick="cerrarObligacion('${ob.id}')">
-                  <i class="fas fa-check-circle"></i> Cerrar
-                </button>
+              <div class="obligacion-header-side">
+                <div class="obligacion-badges">
+                  <span class="badge badge-primary"><i class="fas fa-piggy-bank"></i> ${fmtMonto(interesesAcum, ob.moneda)}</span>
+                </div>
+                <div class="obligacion-actions">
+                  ${esCreditoUVR(ob) ? `<button class="btn btn-sm btn-outline" onclick="abrirProyeccionUVR('${ob.id}')"><i class="fas fa-chart-line"></i> Proyección</button>` : ''}
+                  <button class="btn btn-sm btn-outline" onclick="editarObligacion('${ob.id}')">
+                    <i class="fas fa-pen"></i> Editar
+                  </button>
+                  <button class="btn btn-sm btn-danger" onclick="solicitarEliminarObligacion('${ob.id}')">
+                    <i class="fas fa-trash"></i> Eliminar
+                  </button>
+                  <button class="btn btn-sm btn-outline" onclick="cerrarObligacion('${ob.id}')">
+                    <i class="fas fa-check-circle"></i> Cerrar
+                  </button>
+                </div>
               </div>
             </div>
 
-            <div class="grid grid-4" style="margin:16px 0;">
+            <div class="grid grid-4 obligacion-metrics">
               <div><b>Saldo</b><br>${saldoMostrar}</div>
               <div><b>Cuota</b><br>${cuotaMostrar}</div>
               <div><b>Interés EA</b><br>${ob.interesEA}%</div>
               <div><b>Cuota actual</b><br><span class="cuota-actual">${ob.numeroCuota}/${ob.cantidadCuotas}</span></div>
             </div>
 
-            <div class="grid grid-3" style="margin-top:16px;">
+            <div class="grid grid-3 obligacion-payment-grid">
               <input type="number" id="abono_${ob.id}" class="form-control" placeholder="Abono extra en COP" value="0" min="0" step="10000">
               <select id="modo_${ob.id}" class="form-control">
                 <option value="mantener_cuota">Mantener cuota (menos plazo)</option>
@@ -1365,13 +1544,13 @@
               </button>
             </div>
 
-            <div class="grid grid-4" style="margin-top:16px; background:var(--color-bg); padding:12px; border-radius:var(--radius-md);">
+            <div class="grid grid-4 obligacion-preview-grid">
               <div><b>Nuevo saldo:</b> <input type="text" readonly class="form-control" id="nuevoSaldo_${ob.id}" value="${saldoMostrar}"></div>
               <div><b>Nueva cuota:</b> <input type="text" readonly class="form-control" id="nuevaCuota_${ob.id}" value="${cuotaMostrar}"></div>
               <div><b>Plazo restante:</b> <input type="text" readonly class="form-control" id="nuevoPlazo_${ob.id}" value="${plazoRestante}"></div>
               <div><b>Ahorro:</b> <input type="text" readonly class="form-control" id="ahorro_${ob.id}" value="${fmtMonto(0, ob.moneda)}"></div>
             </div>
-            <div class="grid grid-4" style="margin-top:8px; font-size:12px; color:var(--color-muted);">
+            <div class="grid grid-4 obligacion-summary-grid">
               <div>Meses ahorrados: <span id="meses_${ob.id}">${cuotasAhorradas}</span></div>
               <div>Total ahorrado: ${fmtMonto(interesesAcum, ob.moneda)}</div>
             </div>
@@ -1401,7 +1580,8 @@
 
         const totalCerradas = obligacionesCerradas.length;
         const totalIntereses = obligacionesCerradas.reduce((sum, c) => {
-          return sum + Number(c.interesesDejadosDePagar || 0);
+          const cerrada = normalizarObligacionCerrada(c);
+          return sum + Number(cerrada.interesesDejadosDePagarCOP || cerrada.interesesDejadosDePagar || 0);
         }, 0);
         const totalCuotas = obligacionesCerradas.reduce((sum, c) => sum + (c.cuotasDejadasDePagar || 0), 0);
         const totalAbonos = obligacionesCerradas.reduce((sum, c) => sum + (c.numeroAbonos || 0), 0);
@@ -1412,10 +1592,11 @@
         byId('totalAbonosHistoricos').textContent = totalAbonos;
 
         container.innerHTML = obligacionesCerradas.slice().reverse().map(c => {
+          const cerrada = normalizarObligacionCerrada(c);
           const numeroAbonos = c.numeroAbonos || c.historicoAbonos?.length || 0;
-          const valorCreditoOriginal = c.valorCreditoOriginal || 0;
-          const interesesEnCOP = Number(c.interesesDejadosDePagar || 0);
-          const valorOriginalEnCOP = Number(c.valorCreditoOriginalCOP || valorCreditoOriginal || 0);
+          const valorCreditoOriginal = cerrada.valorCreditoOriginal || 0;
+          const interesesEnCOP = Number(cerrada.interesesDejadosDePagarCOP || cerrada.interesesDejadosDePagar || 0);
+          const valorOriginalEnCOP = Number(cerrada.valorCreditoOriginalCOP || valorCreditoOriginal || 0);
           const porcentajeAhorro = valorOriginalEnCOP > 0 
             ? Math.round((interesesEnCOP / valorOriginalEnCOP) * 100) 
             : 0;
@@ -1471,7 +1652,7 @@
               
               <div class="cerrada-details">
                 <div><span style="color:var(--color-muted);">Crédito original:</span><br><strong>${fmtCOP(valorOriginalEnCOP)}</strong></div>
-                <div><span style="color:var(--color-muted);">Total abonado:</span><br><strong>${fmtCOP(c.totalAbonos || 0)}</strong></div>
+                <div><span style="color:var(--color-muted);">Total abonado:</span><br><strong>${fmtCOP(cerrada.totalAbonosCOP || cerrada.totalAbonos || 0)}</strong></div>
                 <div><span style="color:var(--color-muted);">Tasa EA:</span><br><strong>${c.interesEA || 'N/A'}%</strong></div>
               </div>
               
@@ -1711,7 +1892,9 @@
         }
 
         try {
-          const datosExcel = obligacionesCerradas.map(c => ({
+          const datosExcel = obligacionesCerradas.map(c => {
+            const cerrada = normalizarObligacionCerrada(c);
+            return ({
             'Entidad': c.entidad || 'N/A',
             'Tipo de crédito': c.tipoCredito || 'N/A',
             'Moneda': c.moneda || 'COP',
@@ -1720,11 +1903,12 @@
             'Saldo final': c.moneda === 'UVR' ? c.saldoFinal?.toFixed(2) + ' UVR' : fmtCOP(c.saldoFinal || 0),
             'Tasa EA %': c.interesEA || 0,
             'Número de abonos': c.numeroAbonos || 0,
-            'Total abonado': c.moneda === 'UVR' ? c.totalAbonos?.toFixed(2) + ' UVR' : fmtCOP(c.totalAbonos || 0),
-            'Intereses ahorrados': c.moneda === 'UVR' ? c.interesesDejadosDePagar?.toFixed(2) + ' UVR' : fmtCOP(c.interesesDejadosDePagar || 0),
+            'Total abonado': fmtCOP(cerrada.totalAbonosCOP || cerrada.totalAbonos || 0),
+            'Intereses ahorrados': fmtCOP(cerrada.interesesDejadosDePagarCOP || cerrada.interesesDejadosDePagar || 0),
             'Cuotas evitadas': c.cuotasDejadasDePagar || 0,
             'Meses ahorrados total': c.mesesAhorradosTotal || 0
-          }));
+            });
+          });
 
           const wb = XLSX.utils.book_new();
           const ws = XLSX.utils.json_to_sheet(datosExcel);
@@ -1856,6 +2040,173 @@
         byId('modalProyeccionUVR').style.display = 'none';
       };
 
+      function setValorMonedaFormulario(id, valor) {
+        const input = byId(id);
+        if (!input) return;
+
+        if (!esNumeroFinito(valor) || Number(valor) <= 0) {
+          input.value = '';
+          input.dataset.raw = '';
+          return;
+        }
+
+        const entero = Math.round(Number(valor));
+        input.dataset.raw = String(entero);
+        input.value = new Intl.NumberFormat('es-CO', {
+          minimumFractionDigits: 0,
+          maximumFractionDigits: 0
+        }).format(entero);
+      }
+
+      function actualizarEstadoFormularioObligacion() {
+        const editando = Boolean(obligacionEditandoId);
+        const titulo = byId('formObligacionTitle');
+        const descripcion = byId('formObligacionModeText');
+        const textoBoton = byId('formSubmitText');
+        const btnCancelar = byId('btnCancelarEdicion');
+
+        if (titulo) titulo.innerHTML = editando
+          ? '<i class="fas fa-pen"></i> Editar obligación'
+          : '<i class="fas fa-plus-circle"></i> Crear nueva obligación';
+        if (descripcion) {
+          descripcion.textContent = editando
+            ? 'Estás editando una obligación existente. Al guardar recalcularemos saldo, cuota y plazo.'
+            : 'Registra una nueva obligación para empezar a seguir su progreso.';
+          descripcion.classList.toggle('hidden', false);
+        }
+        if (textoBoton) textoBoton.textContent = editando ? 'Guardar cambios' : 'Crear obligación';
+        if (btnCancelar) btnCancelar.classList.toggle('hidden', !editando);
+      }
+
+      function cargarObligacionEnFormulario(id) {
+        const ob = obligaciones.find((item) => item.id === id);
+        if (!ob) return;
+
+        obligacionEditandoId = id;
+        byId('entidadSelect').value = ob.entidad || '';
+        byId('tipoCredito').value = ob.tipoCredito || '';
+        byId('fechaVencimiento').value = toIsoDate(ob.fechaProximoVencimiento || hoyISO(), hoyISO());
+        byId('interesEA').value = Number(ob.interesEA || 0);
+        byId('numeroCuota').value = Number(ob.numeroCuota || 1);
+        byId('cantidadCuotas').value = Number(ob.cantidadCuotas || 1);
+        byId('penalidadPrepago').value = Number(ob.penalidadPrepagoPct || 0) || '';
+
+        const esUVR = esCreditoUVR(ob);
+        seleccionarMoneda(esUVR ? 'UVR' : 'COP');
+        actualizarVisibilidadCamposUVR();
+
+        if (esUVR) {
+          const valorUVRBase = sanearValorUvr(ob?.uvr?.valorUVRBase || ob?.uvr?.valorUVRActual || uvrActual);
+          byId('fechaDesembolsoUVR').value = toIsoDate(ob?.uvr?.fechaDesembolso || hoyISO(), hoyISO());
+          byId('inflacionEsperadaEA').value = Number(ob?.uvr?.inflacionEsperadaEA ?? UVR_CONFIG.DEFAULT_INFLATION_EA);
+          byId('uvrManual').value = roundTo(valorUVRBase, 4).toFixed(4);
+          setValorMonedaFormulario('valorCredito', obtenerSaldoEdicionCOP(ob));
+          const cuotaEstimadaCOP = roundTo(uvrToCop(Number(ob.valorCuota || 0), valorUVRBase), 2);
+          setValorMonedaFormulario('valorCuota', cuotaEstimadaCOP);
+        } else {
+          setValorMonedaFormulario('valorCredito', Number(ob.saldoActual || 0));
+          setValorMonedaFormulario('valorCuota', Number(ob.valorCuota || 0));
+          byId('fechaDesembolsoUVR').value = '';
+          byId('inflacionEsperadaEA').value = UVR_CONFIG.DEFAULT_INFLATION_EA;
+          byId('uvrManual').value = roundTo(uvrActual, 4).toFixed(4);
+        }
+
+        actualizarResumenUVRFormulario();
+        actualizarEstadoFormularioObligacion();
+
+        const formularioCard = byId('formObligacion')?.closest('.card');
+        formularioCard?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+
+      function renderizarAjusteDashboard() {
+        const contenedor = byId('dashboardDeletionImpact');
+        if (!contenedor) return;
+
+        const ajuste = ultimoAjusteDashboard;
+        const tieneImpacto = ajuste && (ajuste.metricas?.intereses > 0 || ajuste.metricas?.capital > 0 || ajuste.metricas?.cuotas > 0);
+
+        if (!tieneImpacto) {
+          contenedor.classList.add('hidden');
+          contenedor.innerHTML = '';
+          return;
+        }
+
+        contenedor.classList.remove('hidden');
+        contenedor.innerHTML = `
+          <div class="dashboard-adjustment-copy">
+            <strong>Ajuste por eliminación:</strong> ${ajuste.entidad} salió del dashboard y estos acumulados se descontaron.
+          </div>
+          <div class="dashboard-adjustment-chips">
+            ${ajuste.metricas.intereses > 0 ? `<span class="dashboard-adjustment-chip">-${fmtCOP(ajuste.metricas.intereses)} en intereses</span>` : ''}
+            ${ajuste.metricas.capital > 0 ? `<span class="dashboard-adjustment-chip">-${fmtCOP(ajuste.metricas.capital)} en capital</span>` : ''}
+            ${ajuste.metricas.cuotas > 0 ? `<span class="dashboard-adjustment-chip">-${ajuste.metricas.cuotas} cuota(s)</span>` : ''}
+          </div>
+          <button type="button" class="dashboard-adjustment-close" onclick="cerrarAjusteDashboard()">&times;</button>
+        `;
+      }
+
+      function abrirModalEliminarObligacion(id) {
+        const ob = obligaciones.find((item) => item.id === id);
+        const modal = byId('modalEliminarObligacion');
+        const detalle = byId('detalleEliminarObligacion');
+        if (!ob || !modal || !detalle) return;
+
+        obligacionPendienteEliminarId = id;
+        const metricas = obtenerMetricasObligacionActiva(ob);
+        const chips = [
+          metricas.intereses > 0 ? `Intereses a descontar: ${fmtCOP(metricas.intereses)}` : '',
+          metricas.capital > 0 ? `Capital a descontar: ${fmtCOP(metricas.capital)}` : '',
+          metricas.cuotas > 0 ? `Cuotas a descontar: ${metricas.cuotas}` : ''
+        ].filter(Boolean);
+
+        detalle.innerHTML = `
+          <strong>${ob.entidad}</strong> (${ob.tipoCredito}) se eliminará de la lista activa.
+          ${chips.length > 0 ? `<div class="delete-impact-list">${chips.map((chip) => `<span class="delete-impact-chip">${chip}</span>`).join('')}</div>` : ''}
+        `;
+        modal.style.display = 'flex';
+      }
+
+      function cerrarModalEliminarObligacion() {
+        obligacionPendienteEliminarId = null;
+        const modal = byId('modalEliminarObligacion');
+        if (modal) modal.style.display = 'none';
+      }
+
+      function eliminarObligacionConfirmada() {
+        const id = obligacionPendienteEliminarId;
+        const ob = obligaciones.find((item) => item.id === id);
+        if (!ob) {
+          cerrarModalEliminarObligacion();
+          return;
+        }
+
+        const metricasEliminadas = obtenerMetricasObligacionActiva(ob);
+        obligaciones = obligaciones.filter((item) => item.id !== id);
+
+        if (obligacionEditandoId === id) {
+          limpiarFormularioObligacion();
+        }
+
+        ultimoAjusteDashboard = (metricasEliminadas.intereses > 0 || metricasEliminadas.capital > 0 || metricasEliminadas.cuotas > 0)
+          ? { entidad: ob.entidad, metricas: metricasEliminadas, fecha: new Date().toISOString() }
+          : null;
+
+        guardarDatos();
+        renderizarTodo();
+        cerrarModalEliminarObligacion();
+
+        notificar(`🗑️ ${ob.entidad} fue eliminada correctamente`, 'success');
+      }
+
+      window.editarObligacion = cargarObligacionEnFormulario;
+      window.solicitarEliminarObligacion = abrirModalEliminarObligacion;
+      window.cerrarModalEliminarObligacion = cerrarModalEliminarObligacion;
+      window.confirmarEliminarObligacion = eliminarObligacionConfirmada;
+      window.cerrarAjusteDashboard = function() {
+        ultimoAjusteDashboard = null;
+        renderizarAjusteDashboard();
+      };
+
       function renderizarTodo() {
         renderObligaciones();
         renderCerradas();
@@ -1917,6 +2268,25 @@
         });
       }
 
+      function construirObligacionEditada(obAnterior, obligacionFormulario) {
+        const evaluacionHistorico = evaluarPreservacionHistoricoEdicion(obAnterior, obligacionFormulario);
+        const historicoAbonos = evaluacionHistorico.preserve ? (obAnterior.historicoAbonos || []) : [];
+
+        const obligacionEditada = normalizarObligacionUVR({
+          ...obligacionFormulario,
+          id: obAnterior.id,
+          historicoAbonos,
+          creadoAt: obAnterior.creadoAt || obligacionFormulario.creadoAt || new Date().toISOString(),
+          cantidadCuotasOriginal: obligacionFormulario.cantidadCuotas,
+          cuotaInicial: obligacionFormulario.numeroCuota
+        });
+
+        return {
+          obligacion: obligacionEditada,
+          evaluacionHistorico
+        };
+      }
+
       function validarObligacionFormulario(obligacion) {
         const errors = [];
         if (!obligacion.entidad) errors.push('Entidad requerida');
@@ -1946,12 +2316,16 @@
             input.dataset.raw = '';
           }
         });
+        ['equivalenciaCreditoUVR', 'cuotaCalculadaUVR', 'cuotaEstimadaCOPUVR'].forEach((id) => {
+          if (byId(id)) byId(id).value = '';
+        });
         const uvrManual = byId('uvrManual');
         if (uvrManual) uvrManual.value = roundTo(uvrActual, 4).toFixed(4);
         if (byId('inflacionEsperadaEA')) byId('inflacionEsperadaEA').value = UVR_CONFIG.DEFAULT_INFLATION_EA;
         obligacionEditandoId = null;
         monedaSeleccionada = 'COP';
         actualizarVisibilidadCamposUVR();
+        actualizarEstadoFormularioObligacion();
       }
 
       /* ========= EVENT LISTENERS ========= */
@@ -1966,16 +2340,16 @@
 
         byId('formObligacion').addEventListener('submit', (e) => {
           e.preventDefault();
-          const nuevaObligacion = construirObligacionDesdeFormulario();
+          const obligacionFormulario = construirObligacionDesdeFormulario();
 
-          const errors = validarObligacionFormulario(nuevaObligacion);
-          if (!nuevaObligacion.entidad) errors.push('Entidad requerida');
-          if (!nuevaObligacion.tipoCredito) errors.push('Tipo de crédito requerido');
-          if (nuevaObligacion.valorCredito <= 0 && nuevaObligacion.moneda !== 'UVR') errors.push('Valor del crédito debe ser > 0');
-          if (nuevaObligacion.valorCuota <= 0 && nuevaObligacion.moneda !== 'UVR') errors.push('Valor cuota debe ser > 0');
-          if (nuevaObligacion.interesEA < 0 || nuevaObligacion.interesEA > 60) errors.push('Interés entre 0% y 60%');
-          if (nuevaObligacion.numeroCuota < 1) errors.push('Numero de cuota debe ser ≥ 1');
-          if (nuevaObligacion.cantidadCuotas < nuevaObligacion.numeroCuota) {
+          const errors = validarObligacionFormulario(obligacionFormulario);
+          if (!obligacionFormulario.entidad) errors.push('Entidad requerida');
+          if (!obligacionFormulario.tipoCredito) errors.push('Tipo de crédito requerido');
+          if (obligacionFormulario.valorCredito <= 0 && obligacionFormulario.moneda !== 'UVR') errors.push('Valor del crédito debe ser > 0');
+          if (obligacionFormulario.valorCuota <= 0 && obligacionFormulario.moneda !== 'UVR') errors.push('Valor cuota debe ser > 0');
+          if (obligacionFormulario.interesEA < 0 || obligacionFormulario.interesEA > 60) errors.push('Interés entre 0% y 60%');
+          if (obligacionFormulario.numeroCuota < 1) errors.push('Numero de cuota debe ser ≥ 1');
+          if (obligacionFormulario.cantidadCuotas < obligacionFormulario.numeroCuota) {
             errors.push('Cantidad cuotas debe ser ≥ número actual');
           }
 
@@ -1985,12 +2359,38 @@
             return;
           }
 
-          obligaciones.push(nuevaObligacion);
+          if (obligacionEditandoId) {
+            const actual = obligaciones.find((ob) => ob.id === obligacionEditandoId);
+            if (!actual) {
+              notificar('No encontramos la obligación que estabas editando. Intenta de nuevo.', 'warning');
+              limpiarFormularioObligacion();
+              return;
+            }
+
+            const { obligacion, evaluacionHistorico } = construirObligacionEditada(actual, obligacionFormulario);
+            obligaciones = obligaciones.map((ob) => ob.id === actual.id ? obligacion : ob);
+
+            guardarDatos();
+            renderizarTodo();
+            limpiarFormularioObligacion();
+
+            if (evaluacionHistorico.preserve) {
+              notificar(`✅ ${obligacion.entidad} fue actualizada y su histórico de abonos se conservó`, 'success');
+            } else if ((actual.historicoAbonos || []).length > 0) {
+              const porcentajeCambio = Math.round((evaluacionHistorico.ratio || 0) * 100);
+              notificar(`⚠️ ${obligacion.entidad} fue actualizada. El histórico se reinició porque el saldo cambió ${porcentajeCambio}%`, 'warning');
+            } else {
+              notificar(`✅ ${obligacion.entidad} fue actualizada correctamente`, 'success');
+            }
+            return;
+          }
+
+          obligaciones.push(obligacionFormulario);
           guardarDatos();
           renderizarTodo();
           limpiarFormularioObligacion();
           
-          notificar(`✅ Obligacion creada correctamente en ${nuevaObligacion.moneda}`, 'success');
+          notificar(`✅ Obligación creada correctamente en ${obligacionFormulario.moneda}`, 'success');
         });
 
         byId('btnAgregarEntidad').addEventListener('click', () => {
@@ -2016,6 +2416,7 @@
         });
 
         byId('btnExportarCerradasXLSX').addEventListener('click', exportarAExcel);
+        byId('btnCancelarEdicion')?.addEventListener('click', limpiarFormularioObligacion);
 
         byId('comparadorTipo').addEventListener('change', actualizarOfertas);
         byId('btnBuscarOfertas').addEventListener('click', actualizarOfertas);
@@ -2036,6 +2437,7 @@
           actualizarResumenUVRFormulario();
         });
         seleccionarMoneda('COP');
+        actualizarEstadoFormularioObligacion();
       }
 
       window.notificar = notificar;

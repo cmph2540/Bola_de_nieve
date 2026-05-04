@@ -118,6 +118,8 @@
       </div>
     </div>
 
+    <div id="dashboardDeletionImpact" class="dashboard-adjustment hidden" aria-live="polite"></div>
+
     <!-- Tarjeta Libertad Financiera -->
     <div class="dashboard-card" id="libertadCard">
       <div class="card-icon">🎯</div>
@@ -154,7 +156,8 @@
 
     <!-- Formulario Nueva Obligación -->
     <div class="card">
-      <h2 class="card-title"><i class="fas fa-plus-circle"></i> Crear nueva obligación</h2>
+      <h2 class="card-title" id="formObligacionTitle"><i class="fas fa-plus-circle"></i> Crear nueva obligación</h2>
+      <p id="formObligacionModeText" class="form-mode-text">Registra una nueva obligación para empezar a seguir su progreso.</p>
       <form id="formObligacion">
         <div class="grid grid-3">
           <div class="form-group">
@@ -246,7 +249,7 @@
 
         <div class="grid grid-3">
           <div class="form-group">
-            <label>Valor crédito</label>
+            <label>Valor actual del crédito</label>
             <input type="text" id="valorCredito" inputmode="numeric" placeholder="Ej: 15.000.000" required />
           </div>
           <div class="form-group" id="grupoValorCuota">
@@ -274,9 +277,14 @@
           </div>
         </div>
 
-        <button type="submit" class="btn btn-primary">
-          <i class="fas fa-save"></i> Crear obligación
-        </button>
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary">
+            <i class="fas fa-save"></i> <span id="formSubmitText">Crear obligación</span>
+          </button>
+          <button type="button" class="btn btn-outline hidden" id="btnCancelarEdicion">
+            <i class="fas fa-times"></i> Cancelar edición
+          </button>
+        </div>
       </form>
     </div>
 
@@ -525,6 +533,25 @@
           <i class="fas fa-check"></i> Aplicar este abono
         </button>
         <button class="btn btn-outline" onclick="cerrarSimulador()">Cancelar</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="modalEliminarObligacion" class="modal" onclick="if(event.target===this) cerrarModalEliminarObligacion()">
+    <div class="modal-content modal-content-sm">
+      <div class="modal-header">
+        <h2><i class="fas fa-trash"></i> Eliminar obligación</h2>
+        <button class="modal-close" onclick="cerrarModalEliminarObligacion()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="confirm-copy">¿Estás seguro de eliminar esta obligación? Esta acción no se puede deshacer.</p>
+        <div id="detalleEliminarObligacion" class="confirm-details"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-danger" onclick="confirmarEliminarObligacion()">
+          <i class="fas fa-trash"></i> Eliminar
+        </button>
+        <button class="btn btn-outline" onclick="cerrarModalEliminarObligacion()">Cancelar</button>
       </div>
     </div>
   </div>
