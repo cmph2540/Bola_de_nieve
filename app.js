@@ -1100,8 +1100,115 @@
         return Math.min(100, Math.max(0, progreso));
       }
 
+      function obtenerFechaInicioProyeccionObligacion(ob) {
+        return toIsoDate(ob?.fechaProximoVencimiento || addMonthsIso(hoyISO(), 1), addMonthsIso(hoyISO(), 1));
+      }
+
+      function obtenerCuotaMensualCOPObligacion(ob, fechaReferencia = hoyISO()) {
+        if (!esCreditoUVR(ob)) return Number(ob?.valorCuota || 0);
+        return roundTo(uvrToCop(Number(ob?.valorCuota || 0), obtenerUVRProyectadaObligacion(ob, fechaReferencia)), 2);
+      }
+
+      function formatearFechaProyeccion(fecha) {
+        const date = parseStoredDate(fecha);
+        if (!date) return 'Sin fecha';
+        return date.toLocaleDateString('es-CO', {
+          day: 'numeric',
+          month: 'long',
+          year: 'numeric'
+        });
+      }
+
+      function proyectarFinObligacion(ob) {
+        if (!ob || Number(ob?.saldoActual || 0) <= 0) return null;
+
+        const fechaInicio = obtenerFechaInicioProyeccionObligacion(ob);
+        const saldoActualCOP = esCreditoUVR(ob) ? obtenerSaldoActualCOP(ob) : Number(ob.saldoActual || 0);
+        const cuotaMensualCOP = obtenerCuotaMensualCOPObligacion(ob, fechaInicio);
+        const abonosHistoricos = ob?.historicoAbonos || [];
+        const em = eaToEm(parsePctToDec(ob.interesEA));
+
+        let mesesRestantes = 0;
+        let fechaFinIso = null;
+        let esProyectable = false;
+        let warnings = [];
+
+        if (esCreditoUVR(ob)) {
+          const contexto = obtenerContextoUVR(ob, warnings);
+          const simulacionUVR = simularPlanPagosUVR({
+            saldoInicialUVR: Number(ob.saldoActual || 0),
+            tasaEARealDec: parsePctToDec(ob.interesEA),
+            cuotaUVR: Number(ob.valorCuota || 0),
+            inflacionEsperadaEA: contexto.inflacionEsperadaEA,
+            valorUVRBase: contexto.valorUVRBase,
+            fechaUVRBase: contexto.fechaUVRBase,
+            fechaInicio
+          });
+
+          mesesRestantes = simulacionUVR.meses;
+          esProyectable = Boolean(simulacionUVR.amortiza) && Number(simulacionUVR.saldoFinalUVR || 0) <= UVR_CONFIG.EPSILON_UVR && mesesRestantes > 0;
+          warnings = [...warnings, ...(simulacionUVR.warnings || [])];
+        } else {
+          const simulacionCOP = simularIntereses(
+            Number(ob.saldoActual || 0),
+            em,
+            Number(ob.valorCuota || 0),
+            UVR_CONFIG.MAX_SIMULATION_MONTHS,
+            ob.moneda
+          );
+
+          mesesRestantes = simulacionCOP.meses;
+          esProyectable = Number(simulacionCOP.saldoFinal || 0) <= 0.01 && mesesRestantes > 0;
+        }
+
+        if (esProyectable) {
+          fechaFinIso = addMonthsIso(fechaInicio, Math.max(0, mesesRestantes - 1));
+        }
+
+        return {
+          id: ob.id,
+          entidad: ob.entidad,
+          tipoCredito: ob.tipoCredito,
+          moneda: ob.moneda || 'COP',
+          fechaInicio,
+          fechaFinIso,
+          fechaFin: fechaFinIso ? parseStoredDate(fechaFinIso) : null,
+          fechaFinTexto: fechaFinIso ? formatearFechaProyeccion(fechaFinIso) : 'Sin proyección',
+          mesesRestantes,
+          saldoActualCOP,
+          cuotaMensualCOP,
+          numeroAbonos: abonosHistoricos.length,
+          esProyectable,
+          warnings
+        };
+      }
+
+      function obtenerProyeccionesLibertad() {
+        return obligaciones
+          .filter((ob) => Number(ob?.saldoActual || 0) > 0)
+          .map((ob) => proyectarFinObligacion(ob))
+          .filter(Boolean);
+      }
+
+      function obtenerReferenciaLibertad(proyecciones) {
+        if (!proyecciones.length) return null;
+
+        const noProyectables = proyecciones.filter((proyeccion) => !proyeccion.esProyectable);
+        if (noProyectables.length > 0) {
+          return noProyectables.sort((a, b) => b.saldoActualCOP - a.saldoActualCOP)[0];
+        }
+
+        return proyecciones.reduce((referencia, actual) => {
+          if (!referencia) return actual;
+          if (!referencia.fechaFin) return actual;
+          if (!actual.fechaFin) return referencia;
+          return actual.fechaFin > referencia.fechaFin ? actual : referencia;
+        }, null);
+      }
+
       function calcularFechaLibertad() {
         const activas = obligaciones.filter(ob => ob.saldoActual > 0);
+        const progresoGlobal = calcularProgresoDeudaCero();
         
         if (activas.length === 0) {
           return { 
@@ -1112,59 +1219,39 @@
           };
         }
 
+        const proyecciones = obtenerProyeccionesLibertad();
+        const referencia = obtenerReferenciaLibertad(proyecciones);
         const saldoTotalCOP = activas.reduce((sum, ob) => {
           return sum + (esCreditoUVR(ob) ? obtenerSaldoActualCOP(ob) : Number(ob.saldoActual || 0));
         }, 0);
-        
-        const pagoMensualCOP = activas.reduce((sum, ob) => {
-          return sum + (esCreditoUVR(ob) ? roundTo(uvrToCop(ob.valorCuota, obtenerUVRProyectadaObligacion(ob, ob.fechaProximoVencimiento || addMonthsIso(hoyISO(), 1))), 2) : Number(ob.valorCuota || 0));
-        }, 0);
-        
-        const abonosRecientes = [];
-        activas.forEach(ob => {
-          if (ob.historicoAbonos && ob.historicoAbonos.length > 0) {
-            ob.historicoAbonos.slice(-3).forEach(a => {
-              if (ob.moneda === 'UVR') {
-                abonosRecientes.push(obtenerMontoAbonoCOP(ob, a));
-              } else {
-                abonosRecientes.push(a.monto || 0);
-              }
-            });
-          }
-        });
-        const promedioAbono = abonosRecientes.length > 0 
-          ? abonosRecientes.reduce((a, b) => a + b, 0) / abonosRecientes.length 
-          : 0;
-        
-        const capacidad = pagoMensualCOP + promedioAbono;
-        if (capacidad <= 0) return { fecha: 'Sin datos', progreso: 0, esLibre: false, mensajeDetalle: `💰 ${activas.length} deuda(s)` };
 
-        const tasaPromedio = activas.reduce((sum, ob) => 
-          sum + (parsePctToDec(ob.interesEA) * (ob.saldoActual / activas.reduce((s, o) => s + o.saldoActual, 0))), 0);
-        const em = eaToEm(tasaPromedio);
-
-        let meses = 0;
-        let saldoSim = saldoTotalCOP;
-        const maxMeses = 600;
-        
-        while (saldoSim > 0.01 && meses < maxMeses) {
-          const interes = saldoSim * em;
-          const pago = Math.min(saldoSim + interes, capacidad);
-          const abonoCapital = Math.max(0, pago - interes);
-          saldoSim -= abonoCapital;
-          meses++;
-          if (abonoCapital <= 0) break;
+        if (!referencia) {
+          return {
+            fecha: 'Sin datos',
+            progreso: progresoGlobal,
+            esLibre: false,
+            mensajeDetalle: `💰 ${fmtCOP(saldoTotalCOP)} · ${activas.length} deuda(s)`
+          };
         }
 
-        const progreso = saldoTotalCOP > 0 ? ((saldoTotalCOP - Math.max(0, saldoSim)) / saldoTotalCOP) * 100 : 100;
-        const fecha = new Date();
-        fecha.setMonth(fecha.getMonth() + meses);
-        
+        if (!referencia.esProyectable) {
+          return {
+            fecha: 'Sin proyección',
+            progreso: progresoGlobal,
+            esLibre: false,
+            mensajeDetalle: `💰 ${referencia.entidad} requiere una cuota que amortice capital`
+          };
+        }
+
+        const detalleObligaciones = proyecciones.length === 1
+          ? `${referencia.entidad} · ${referencia.mesesRestantes} cuota(s) restantes`
+          : `${referencia.entidad} marca la fecha objetivo · ${referencia.mesesRestantes} cuota(s) restantes`;
+
         return {
-          fecha: fecha.toLocaleDateString('es-CO', { year: 'numeric', month: 'long' }),
-          progreso: calcularProgresoDeudaCero(),
+          fecha: referencia.fechaFinTexto,
+          progreso: progresoGlobal,
           esLibre: false,
-          mensajeDetalle: `💰 ${fmtCOP(saldoTotalCOP)} · ${activas.length} deuda(s)`
+          mensajeDetalle: `💰 ${detalleObligaciones} · ${fmtCOP(saldoTotalCOP)} pendiente`
         };
       }
 

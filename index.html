@@ -138,7 +138,7 @@
     <div class="card">
       <div class="card-title">
         <i class="fas fa-chart-line"></i> Evolución de tu deuda
-        <div class="flex gap-2" style="margin-left: auto;">
+        <div class="card-title-actions">
           <button class="btn btn-sm btn-outline" onclick="cambiarVistaGrafico('mensual')">Mensual</button>
           <button class="btn btn-sm btn-outline" onclick="cambiarVistaGrafico('acumulado')">Acumulado</button>
         </div>
@@ -147,7 +147,7 @@
     </div>
 
     <!-- Botón Simulador -->
-    <div class="flex justify-between items-center mb-4">
+    <div class="section-header mb-4">
       <h2 class="card-title" style="margin:0;"><i class="fas fa-calculator"></i> Gestión de Obligaciones</h2>
       <button class="btn btn-primary" onclick="abrirSimulador()">
         <i class="fas fa-chart-pie"></i> Simular escenarios
@@ -163,7 +163,7 @@
           <div class="form-group">
             <label>Entidad</label>
             <select id="entidadSelect" required></select>
-            <div style="margin-top:6px;">
+            <div class="inline-action-row">
               <button type="button" class="btn btn-outline btn-sm" id="btnAgregarEntidad">
                 <i class="fas fa-plus"></i> Agregar
               </button>
@@ -290,9 +290,9 @@
 
     <!-- Listado de Obligaciones -->
     <div class="card">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+      <div class="section-header section-header-compact">
         <h2 class="card-title" style="margin:0;"><i class="fas fa-list"></i> Mis obligaciones</h2>
-        <div class="flex gap-2">
+        <div class="section-header-actions">
           <button class="btn btn-sm btn-outline" id="btnOrdenSnowball">
             <i class="fas fa-snowflake"></i> Bola de nieve
           </button>
@@ -315,7 +315,7 @@
 
     <!-- ========= HISTÓRICO MEJORADO - TOTALMENTE RESPONSIVE ========= -->
     <div class="card">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap: wrap; gap: 12px;">
+      <div class="section-header">
         <h2 class="card-title" style="margin:0;">
           <i class="fas fa-archive"></i> Histórico de obligaciones cerradas
         </h2>
@@ -345,14 +345,14 @@
       </div>
 
       <!-- Listado detallado - Totalmente responsive -->
-      <div id="cerradasListado" style="max-height: 500px; overflow-y: auto;"></div>
+      <div id="cerradasListado" class="scroll-panel"></div>
     </div>
 
     <!-- ========= COMPARADOR DE OFERTAS MEJORADO ========= -->
     <div class="card">
       <h2 class="card-title"><i class="fas fa-search"></i> Entidades con interés más bajo</h2>
       
-      <div class="grid grid-2" style="margin-bottom: 20px;">
+      <div class="grid grid-2 filter-grid">
         <div class="form-group">
           <label>Filtrar por tipo de crédito</label>
           <select id="comparadorTipo" onchange="filtrarOfertas()">
@@ -364,7 +364,7 @@
             <option value="libre_inversion">Libre inversión</option>
           </select>
         </div>
-        <div style="display:flex; align-items:flex-end;">
+        <div class="filter-grid-action">
           <button class="btn btn-secondary" id="btnBuscarOfertas" onclick="filtrarOfertas()">
             <i class="fas fa-search"></i> Buscar mejores tasas
           </button>
