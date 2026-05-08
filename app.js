@@ -97,6 +97,7 @@
       const byId = (id) => document.getElementById(id);
       const hoyISO = () => new Date().toISOString().slice(0, 10);
       const parsePctToDec = (pct) => (Number(pct) || 0) / 100;
+      const DAY_IN_MS = 24 * 60 * 60 * 1000;
       const parseFormattedNumber = (value) => Number(String(value || "")
         .replace(/\$/g, "")
         .replace(/\s/g, "")
@@ -133,10 +134,25 @@
       const parseStoredDate = (value) => {
         if (!value) return null;
         if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
-        if (typeof value === "string" && /^\d{2}\/\d{2}\/\d{4}$/.test(value)) {
-          const [day, month, year] = value.split("/").map(Number);
-          const parsed = new Date(year, month - 1, day);
-          return Number.isNaN(parsed.getTime()) ? null : parsed;
+        if (typeof value === "string") {
+          const normalized = value
+            .normalize("NFKD")
+            .replace(/\u00A0/g, " ")
+            .replace(/\s+/g, " ")
+            .trim();
+
+          const localeMatch = normalized.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:,?\s*(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(?:([ap])\.?\s*m\.?)?)?$/i);
+          if (localeMatch) {
+            const [, dayStr, monthStr, yearStr, hourStr = "0", minuteStr = "0", secondStr = "0", period = "a"] = localeMatch;
+            let hour = Number(hourStr);
+            const minute = Number(minuteStr);
+            const second = Number(secondStr);
+            const periodLower = String(period || "a").toLowerCase();
+            if (periodLower === "p" && hour < 12) hour += 12;
+            if (periodLower === "a" && hour === 12) hour = 0;
+            const parsed = new Date(Number(yearStr), Number(monthStr) - 1, Number(dayStr), hour, minute, second);
+            return Number.isNaN(parsed.getTime()) ? null : parsed;
+          }
         }
         const parsed = new Date(value);
         return Number.isNaN(parsed.getTime()) ? null : parsed;
@@ -172,6 +188,7 @@
       let logrosDesbloqueados = [];
       let ordenMetodo = 'snowball';
       let graficoInstance = null;
+      let vistaGraficoActual = 'acumulado';
 
       /* ========= FUNCIONES PARA VIVIENDA Y UVR (TODAS TUS FUNCIONES ORIGINALES) ========= */
       function sanearInflacionPct(inflacionPct, warnings = []) {
@@ -1351,6 +1368,736 @@
         }
       }
 
+      const GRAFICO_SERIES_TOP = [
+        { color: '#1B4F85', fill: 'rgba(27, 79, 133, 0.12)', dash: [] },
+        { color: '#E85D4F', fill: 'rgba(232, 93, 79, 0.12)', dash: [10, 6] },
+        { color: '#C98718', fill: 'rgba(201, 135, 24, 0.12)', dash: [3, 6] }
+      ];
+
+      function prioridadEventoGrafico(tipoEvento) {
+        const prioridad = {
+          creacion: 0,
+          abono: 1,
+          cierre: 2,
+          continuidad: 3
+        };
+        return prioridad[tipoEvento] ?? 99;
+      }
+
+      function fmtCOPCompacto(value) {
+        const amount = Number(value) || 0;
+        const abs = Math.abs(amount);
+        const sign = amount < 0 ? '-' : '';
+
+        if (abs >= 1000000) {
+          const digits = abs >= 10000000 ? 0 : 1;
+          return `${sign}$${(abs / 1000000).toLocaleString('es-CO', { maximumFractionDigits: digits })} M`;
+        }
+
+        if (abs >= 1000) {
+          const digits = abs >= 10000 ? 0 : 1;
+          return `${sign}$${(abs / 1000).toLocaleString('es-CO', { maximumFractionDigits: digits })} mil`;
+        }
+
+        return fmtCOP(amount);
+      }
+
+      function formatearFechaGraficoEje(timestamp, rangoMs = 0) {
+        const fecha = new Date(Number(timestamp));
+        if (Number.isNaN(fecha.getTime())) return '';
+
+        if (vistaGraficoActual === 'mensual' || rangoMs > (365 * DAY_IN_MS)) {
+          return fecha.toLocaleDateString('es-CO', {
+            month: '2-digit',
+            year: '2-digit'
+          });
+        }
+
+        return fecha.toLocaleDateString('es-CO', {
+          day: '2-digit',
+          month: '2-digit'
+        });
+      }
+
+      function formatearFechaGraficoTooltip(timestamp) {
+        const fecha = new Date(Number(timestamp));
+        if (Number.isNaN(fecha.getTime())) return '--/--/----';
+        const fechaBase = fecha.toLocaleDateString('es-CO', {
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric'
+        });
+        const tieneHora = fecha.getHours() !== 0 || fecha.getMinutes() !== 0 || fecha.getSeconds() !== 0;
+        if (!tieneHora) return fechaBase;
+        return `${fechaBase} ${fecha.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}`;
+      }
+
+      function normalizarTimestampGraficoPorFecha(value) {
+        const fecha = parseStoredDate(value);
+        if (!fecha) return null;
+        return new Date(fecha.getFullYear(), fecha.getMonth(), fecha.getDate()).getTime();
+      }
+
+      function consolidarEventosGraficoPorFecha(eventos) {
+        const eventosConsolidados = new Map();
+
+        eventos.forEach((evento) => {
+          const timestampNormalizado = normalizarTimestampGraficoPorFecha(evento.x);
+          if (!Number.isFinite(timestampNormalizado)) return;
+
+          const actual = eventosConsolidados.get(timestampNormalizado) || {
+            x: timestampNormalizado,
+            y: Number(evento.y || 0),
+            marker: false,
+            eventType: 'continuidad'
+          };
+
+          actual.y = Number(evento.y || 0);
+          actual.marker = actual.marker || Boolean(evento.marker) || evento.eventType === 'abono';
+          actual.eventType = actual.marker ? 'abono' : evento.eventType;
+
+          if (!actual.marker && evento.eventType === 'cierre') {
+            actual.eventType = 'cierre';
+          }
+
+          eventosConsolidados.set(timestampNormalizado, actual);
+        });
+
+        return [...eventosConsolidados.values()].sort((a, b) => a.x - b.x);
+      }
+
+      function actualizarBotonesVistaGrafico() {
+        document.querySelectorAll('[data-chart-view]').forEach((button) => {
+          button.classList.toggle('is-active', button.dataset.chartView === vistaGraficoActual);
+        });
+      }
+
+      function obtenerValorInicialCOPGrafico(ob) {
+        if (!ob) return 0;
+        if (esNumeroFinito(ob.valorCreditoOriginalCOP)) return Number(ob.valorCreditoOriginalCOP);
+        if (esCreditoUVR(ob)) return roundTo(obtenerValorCreditoBaseCOP(ob), 2);
+        return Number(ob.valorCredito || ob.saldoActual || 0);
+      }
+
+      function obtenerSaldoPosteriorCOPGrafico(ob, abono) {
+        if (!abono) return 0;
+        if (esNumeroFinito(abono.saldoPosteriorCOP)) return Number(abono.saldoPosteriorCOP);
+        if (esCreditoUVR(ob) && esNumeroFinito(abono.saldoPosteriorUVR)) {
+          const valorUvr = sanearValorUvr(abono.uvrOperacion || ob?.uvr?.valorUVRActual || ob?.uvr?.valorUVRBase || uvrActual);
+          return roundTo(uvrToCop(Number(abono.saldoPosteriorUVR || 0), valorUvr), 2);
+        }
+        return Number(abono.saldoPosterior || 0);
+      }
+
+      function obtenerSaldoFinalCOPGrafico(ob) {
+        if (!ob) return 0;
+        if (esNumeroFinito(ob.saldoFinalCOP)) return Number(ob.saldoFinalCOP);
+        if (esCreditoUVR(ob)) {
+          const valorUvr = sanearValorUvr(ob?.uvr?.valorUVRActual || ob?.uvr?.valorUVRBase || uvrActual);
+          return roundTo(uvrToCop(Number(ob.saldoFinal || 0), valorUvr), 2);
+        }
+        return Number(ob.saldoFinal || 0);
+      }
+
+      function construirEventosObligacionGrafico(ob, estaCerrada = false) {
+        const fechaCreacion = parseStoredDate(
+          ob?.creadoAt
+          || ob?.fechaCreacion
+          || ob?.historicoAbonos?.[0]?.fechaRegistro
+          || ob?.historicoAbonos?.[0]?.fecha
+          || ob?.fechaCierreISO
+          || ob?.fechaCierre
+        );
+        if (!fechaCreacion) return [];
+
+        const eventos = [{
+          x: fechaCreacion.getTime(),
+          y: roundTo(obtenerValorInicialCOPGrafico(ob), 2),
+          marker: false,
+          eventType: 'creacion'
+        }];
+
+        const abonos = [...(ob?.historicoAbonos || [])]
+          .map((abono) => ({
+            ...abono,
+            __fechaEvento: parseStoredDate(abono?.fechaRegistro || abono?.fecha)
+          }))
+          .filter((abono) => abono.__fechaEvento)
+          .sort((a, b) => a.__fechaEvento - b.__fechaEvento);
+
+        abonos.forEach((abono) => {
+          eventos.push({
+            x: abono.__fechaEvento.getTime(),
+            y: roundTo(obtenerSaldoPosteriorCOPGrafico(ob, abono), 2),
+            marker: true,
+            eventType: 'abono'
+          });
+        });
+
+        const fechaCierre = estaCerrada ? parseStoredDate(ob?.fechaCierreISO || ob?.fechaCierre) : null;
+        if (fechaCierre) {
+          eventos.push({
+            x: fechaCierre.getTime(),
+            y: roundTo(obtenerSaldoFinalCOPGrafico(ob), 2),
+            marker: false,
+            eventType: 'cierre'
+          });
+        }
+
+        const ordenados = eventos.sort((a, b) => (a.x - b.x) || (prioridadEventoGrafico(a.eventType) - prioridadEventoGrafico(b.eventType)));
+        return consolidarEventosGraficoPorFecha(ordenados);
+      }
+
+      function obtenerSaldoObligacionEnFecha(eventos, timestamp) {
+        let saldo = null;
+        for (const evento of eventos) {
+          if (evento.x > timestamp) break;
+          saldo = Number(evento.y || 0);
+        }
+        return saldo;
+      }
+
+      function construirTimelineGrafico(eventosPorObligacion) {
+        const timeline = [...new Set(
+          eventosPorObligacion
+            .flatMap((item) => item.eventos.map((evento) => evento.x))
+            .filter((timestamp) => Number.isFinite(timestamp))
+            .sort((a, b) => a - b)
+        )];
+
+        if (timeline.length === 1) {
+          const ultimo = timeline[0];
+          const ahora = Date.now();
+          timeline.push(ahora > ultimo ? ahora : (ultimo + DAY_IN_MS));
+        }
+
+        return timeline;
+      }
+
+      function construirSerieGraficoParaTimeline(eventos, timeline) {
+        return timeline.map((timestamp) => {
+          const saldo = obtenerSaldoObligacionEnFecha(eventos, timestamp);
+          const esAbono = eventos.some((evento) => evento.x === timestamp && evento.eventType === 'abono');
+          return {
+            x: timestamp,
+            y: saldo === null ? null : roundTo(saldo, 2),
+            marker: esAbono,
+            eventType: esAbono ? 'abono' : 'continuidad'
+          };
+        });
+      }
+
+      function obtenerTopObligacionesParaGrafico() {
+        return obligaciones
+          .filter((ob) => Number(ob?.saldoActual || 0) > 0)
+          .map((ob) => ({
+            obligacion: ob,
+            saldoActualCOP: esCreditoUVR(ob) ? obtenerSaldoActualCOP(ob) : Number(ob.saldoActual || 0)
+          }))
+          .sort((a, b) => b.saldoActualCOP - a.saldoActualCOP)
+          .slice(0, 3);
+      }
+
+      function construirDatasetsGraficoDeuda() {
+        const obligacionesHistoricas = [
+          ...obligaciones.map((ob) => ({ obligacion: ob, estaCerrada: false })),
+          ...obligacionesCerradas.map((cerrada) => ({
+            obligacion: normalizarObligacionCerrada(cerrada),
+            estaCerrada: true
+          }))
+        ];
+
+        const eventosPorObligacion = obligacionesHistoricas
+          .map(({ obligacion, estaCerrada }) => ({
+            obligacion,
+            estaCerrada,
+            eventos: construirEventosObligacionGrafico(obligacion, estaCerrada)
+          }))
+          .filter((item) => item.eventos.length > 0);
+
+        const timeline = construirTimelineGrafico(eventosPorObligacion);
+        if (!timeline.length) {
+          return { datasets: [], timeline: [] };
+        }
+
+        const puntosTotal = timeline.map((timestamp) => {
+          const esAbono = eventosPorObligacion.some((item) => item.eventos.some((evento) => evento.x === timestamp && evento.eventType === 'abono'));
+          return {
+            x: timestamp,
+            y: roundTo(eventosPorObligacion.reduce((sum, item) => {
+              const saldo = obtenerSaldoObligacionEnFecha(item.eventos, timestamp);
+              return sum + (saldo === null ? 0 : saldo);
+            }, 0), 2),
+            marker: esAbono,
+            eventType: esAbono ? 'abono' : 'continuidad'
+          };
+        });
+
+        const datasets = [{
+          label: 'Total general',
+          data: puntosTotal,
+          borderColor: '#009A67',
+          backgroundColor: 'rgba(0, 154, 103, 0.16)',
+          borderWidth: 4,
+          fill: true,
+          stepped: false,
+          tension: 0.32,
+          cubicInterpolationMode: 'monotone',
+          pointRadius: (ctx) => ctx.raw?.marker ? 5 : 0,
+          pointHoverRadius: (ctx) => ctx.raw?.marker ? 8 : 0,
+          pointHitRadius: (ctx) => ctx.raw?.marker ? 14 : 6,
+          pointBackgroundColor: '#009A67',
+          pointBorderColor: '#ffffff',
+          pointBorderWidth: 2.5
+        }];
+
+        const topActivas = obtenerTopObligacionesParaGrafico();
+        topActivas.forEach(({ obligacion }, index) => {
+          const estilo = GRAFICO_SERIES_TOP[index] || GRAFICO_SERIES_TOP[GRAFICO_SERIES_TOP.length - 1];
+          const eventos = construirEventosObligacionGrafico(obligacion, false);
+          const data = construirSerieGraficoParaTimeline(eventos, timeline);
+          if (!data.some((point) => point.y !== null)) return;
+
+          datasets.push({
+            label: obligacion.entidad,
+            data,
+            borderColor: estilo.color,
+            backgroundColor: estilo.fill,
+            borderWidth: 3,
+            fill: false,
+            stepped: false,
+            tension: 0.28,
+            cubicInterpolationMode: 'monotone',
+            borderDash: estilo.dash,
+            pointRadius: (ctx) => ctx.raw?.marker ? 4.5 : 0,
+            pointHoverRadius: (ctx) => ctx.raw?.marker ? 7 : 0,
+            pointHitRadius: (ctx) => ctx.raw?.marker ? 14 : 6,
+            pointBackgroundColor: estilo.color,
+            pointBorderColor: '#ffffff',
+            pointBorderWidth: 2.5,
+            spanGaps: false
+          });
+        });
+
+        return { datasets, timeline };
+      }
+
+      function renderizarGrafico() {
+        const canvas = byId('graficoDeuda');
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+
+        actualizarBotonesVistaGrafico();
+        if (graficoInstance) graficoInstance.destroy();
+
+        const { datasets, timeline } = construirDatasetsGraficoDeuda();
+        const rangoMs = timeline.length > 1 ? (timeline[timeline.length - 1] - timeline[0]) : 0;
+        const ahora = Date.now();
+
+        graficoInstance = new Chart(ctx, {
+          type: 'line',
+          data: {
+            datasets: datasets.length > 0 ? datasets : [{
+              label: 'Total general',
+              data: [
+                { x: ahora, y: 0, marker: false, eventType: 'continuidad' },
+                { x: ahora + DAY_IN_MS, y: 0, marker: false, eventType: 'continuidad' }
+              ],
+              borderColor: '#CBD5E1',
+              backgroundColor: 'rgba(203, 213, 225, 0.12)',
+              borderWidth: 2,
+              fill: true,
+              stepped: false,
+              tension: 0.25,
+              cubicInterpolationMode: 'monotone',
+              pointRadius: 0
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: {
+              mode: 'nearest',
+              intersect: false
+            },
+            scales: {
+              x: {
+                type: 'linear',
+                grid: {
+                  display: false,
+                  drawBorder: false
+                },
+                ticks: {
+                  autoSkip: true,
+                  maxTicksLimit: vistaGraficoActual === 'mensual' ? 6 : 8,
+                  color: '#5B7088',
+                  padding: 8,
+                  callback: (value) => formatearFechaGraficoEje(value, rangoMs)
+                }
+              },
+              y: {
+                beginAtZero: true,
+                grid: {
+                  color: 'rgba(31, 78, 121, 0.10)',
+                  drawBorder: false
+                },
+                ticks: {
+                  color: '#5B7088',
+                  padding: 8,
+                  callback: (value) => fmtCOPCompacto(value)
+                }
+              }
+            },
+            plugins: {
+              legend: {
+                position: 'bottom',
+                labels: {
+                  usePointStyle: true,
+                  pointStyle: 'line',
+                  padding: 16,
+                  color: '#1F2937'
+                }
+              },
+              tooltip: {
+                backgroundColor: 'rgba(17, 24, 39, 0.92)',
+                titleColor: '#F8FAFC',
+                bodyColor: '#F8FAFC',
+                borderColor: 'rgba(255, 255, 255, 0.12)',
+                borderWidth: 1,
+                padding: 12,
+                displayColors: true,
+                callbacks: {
+                  title: (items) => formatearFechaGraficoTooltip(items?.[0]?.raw?.x ?? items?.[0]?.parsed?.x),
+                  label: (context) => `${context.dataset.label}: ${fmtCOP(context.parsed.y)}`
+                }
+              }
+            }
+          }
+        });
+      }
+
+      const GRAFICO_MAX_TOTAL_POINTS = 500;
+      const GRAFICO_MAX_AXIS_LABELS = 30;
+
+      function formatearFechaGraficoContinuo(timestamp, rangoMs = 0) {
+        const fecha = new Date(Number(timestamp));
+        if (Number.isNaN(fecha.getTime())) return '';
+        const vistaMensual = vistaGraficoActual === 'mensual' || rangoMs > (180 * DAY_IN_MS);
+        return fecha.toLocaleDateString('es-CO', vistaMensual
+          ? { month: 'numeric', year: '2-digit' }
+          : { day: 'numeric', month: 'numeric' });
+      }
+
+      function limpiarSerieGraficoContinuo(puntos = []) {
+        const consolidados = consolidarEventosGraficoPorFecha(puntos);
+        return consolidados.reduce((serieLimpia, punto) => {
+          const actual = {
+            x: Number(punto.x),
+            y: roundTo(Number(punto.y || 0), 2),
+            marker: Boolean(punto.marker),
+            eventType: punto.eventType || 'continuidad'
+          };
+
+          if (!serieLimpia.length) {
+            serieLimpia.push(actual);
+            return serieLimpia;
+          }
+
+          const previo = serieLimpia[serieLimpia.length - 1];
+          if (previo.x === actual.x) {
+            serieLimpia[serieLimpia.length - 1] = {
+              ...actual,
+              marker: previo.marker || actual.marker,
+              eventType: (previo.marker || actual.marker) ? 'abono' : actual.eventType
+            };
+            return serieLimpia;
+          }
+
+          const mismoSaldo = Math.abs(Number(previo.y || 0) - Number(actual.y || 0)) < 0.01;
+          if (mismoSaldo && !actual.marker) {
+            return serieLimpia;
+          }
+
+          serieLimpia.push(actual);
+          return serieLimpia;
+        }, []);
+      }
+
+      function construirEventosObligacionGraficoContinuo(ob, estaCerrada = false) {
+        return limpiarSerieGraficoContinuo(construirEventosObligacionGrafico(ob, estaCerrada));
+      }
+
+      function obtenerFechasUnicasGraficoContinuo(eventosPorObligacion) {
+        return [...new Set(
+          eventosPorObligacion
+            .flatMap((item) => item.eventos.map((evento) => evento.x))
+            .filter((timestamp) => Number.isFinite(timestamp))
+        )].sort((a, b) => a - b);
+      }
+
+      function construirSerieTotalGraficoContinuo(eventosPorObligacion) {
+        const fechasUnicas = obtenerFechasUnicasGraficoContinuo(eventosPorObligacion);
+        const puntos = fechasUnicas.map((timestamp) => {
+          const esAbono = eventosPorObligacion.some((item) =>
+            item.eventos.some((evento) => evento.x === timestamp && evento.eventType === 'abono')
+          );
+
+          return {
+            x: timestamp,
+            y: roundTo(eventosPorObligacion.reduce((sum, item) => {
+              const saldo = obtenerSaldoObligacionEnFecha(item.eventos, timestamp);
+              return sum + (saldo === null ? 0 : saldo);
+            }, 0), 2),
+            marker: esAbono,
+            eventType: esAbono ? 'abono' : 'continuidad'
+          };
+        });
+
+        return limpiarSerieGraficoContinuo(puntos);
+      }
+
+      function diezmarSerieGraficoContinuo(puntos, maxPoints) {
+        const serie = limpiarSerieGraficoContinuo(puntos);
+        if (serie.length <= maxPoints) return serie;
+
+        const indicesClave = new Set([0, serie.length - 1]);
+        serie.forEach((punto, index) => {
+          if (punto.marker) indicesClave.add(index);
+        });
+
+        if (indicesClave.size >= maxPoints) {
+          return serie.filter((_, index) => indicesClave.has(index));
+        }
+
+        const seleccionados = new Set(indicesClave);
+        const disponibles = [];
+        for (let i = 1; i < serie.length - 1; i++) {
+          if (!indicesClave.has(i)) disponibles.push(i);
+        }
+
+        const cuposRestantes = Math.max(0, maxPoints - seleccionados.size);
+        const rangoTotal = Math.max(DAY_IN_MS, Number(serie[serie.length - 1].x) - Number(serie[0].x));
+        const intervaloObjetivo = cuposRestantes > 0
+          ? Math.max(DAY_IN_MS, Math.ceil(rangoTotal / cuposRestantes))
+          : Infinity;
+
+        let umbralActual = Number(serie[0].x) + intervaloObjetivo;
+        disponibles.forEach((index) => {
+          if (seleccionados.size >= maxPoints) return;
+          if (Number(serie[index].x) >= umbralActual) {
+            seleccionados.add(index);
+            umbralActual = Number(serie[index].x) + intervaloObjetivo;
+          }
+        });
+
+        disponibles.forEach((index) => {
+          if (seleccionados.size < maxPoints && !seleccionados.has(index)) {
+            seleccionados.add(index);
+          }
+        });
+
+        return serie.filter((_, index) => seleccionados.has(index));
+      }
+
+      function aplicarLimiteDatasetsGraficoContinuo(datasets) {
+        const totalPuntos = datasets.reduce((sum, dataset) => sum + (dataset.data?.length || 0), 0);
+        if (totalPuntos <= GRAFICO_MAX_TOTAL_POINTS) return datasets;
+
+        const cantidadSeries = Math.max(1, datasets.length);
+        const maxPorSerie = Math.max(2, Math.floor(GRAFICO_MAX_TOTAL_POINTS / cantidadSeries));
+        return datasets.map((dataset) => ({
+          ...dataset,
+          data: diezmarSerieGraficoContinuo(dataset.data || [], maxPorSerie)
+        }));
+      }
+
+      function obtenerFechasEjeGraficoContinuo(datasets) {
+        return [...new Set(
+          datasets.flatMap((dataset) => (dataset.data || []).map((punto) => punto.x))
+        )].sort((a, b) => a - b);
+      }
+
+      function construirDatasetsGraficoDeudaContinuo() {
+        const obligacionesHistoricas = [
+          ...obligaciones.map((ob) => ({ obligacion: ob, estaCerrada: false })),
+          ...obligacionesCerradas.map((cerrada) => ({
+            obligacion: normalizarObligacionCerrada(cerrada),
+            estaCerrada: true
+          }))
+        ];
+
+        const eventosPorObligacion = obligacionesHistoricas
+          .map(({ obligacion, estaCerrada }) => ({
+            obligacion,
+            estaCerrada,
+            eventos: construirEventosObligacionGraficoContinuo(obligacion, estaCerrada)
+          }))
+          .filter((item) => item.eventos.length > 0);
+
+        const datasets = [];
+        const serieTotal = construirSerieTotalGraficoContinuo(eventosPorObligacion);
+
+        if (serieTotal.length > 0) {
+          datasets.push({
+            label: 'Total general',
+            data: serieTotal,
+            borderColor: '#009A67',
+            backgroundColor: 'rgba(0, 154, 103, 0.16)',
+            borderWidth: 4,
+            fill: true,
+            tension: 0.28,
+            cubicInterpolationMode: 'monotone',
+            pointRadius: (ctx) => ctx.raw?.marker ? 5 : 0,
+            pointHoverRadius: (ctx) => ctx.raw?.marker ? 8 : 0,
+            pointHitRadius: (ctx) => ctx.raw?.marker ? 14 : 6,
+            pointBackgroundColor: '#009A67',
+            pointBorderColor: '#ffffff',
+            pointBorderWidth: 2.5
+          });
+        }
+
+        obtenerTopObligacionesParaGrafico().forEach(({ obligacion }, index) => {
+          const estilo = GRAFICO_SERIES_TOP[index] || GRAFICO_SERIES_TOP[GRAFICO_SERIES_TOP.length - 1];
+          const data = construirEventosObligacionGraficoContinuo(obligacion, false);
+          if (!data.length) return;
+
+          datasets.push({
+            label: obligacion.entidad,
+            data,
+            borderColor: estilo.color,
+            backgroundColor: estilo.fill,
+            borderWidth: 3,
+            fill: false,
+            tension: 0.24,
+            cubicInterpolationMode: 'monotone',
+            borderDash: estilo.dash,
+            pointRadius: (ctx) => ctx.raw?.marker ? 4.5 : 0,
+            pointHoverRadius: (ctx) => ctx.raw?.marker ? 7 : 0,
+            pointHitRadius: (ctx) => ctx.raw?.marker ? 14 : 6,
+            pointBackgroundColor: estilo.color,
+            pointBorderColor: '#ffffff',
+            pointBorderWidth: 2.5,
+            spanGaps: false
+          });
+        });
+
+        return aplicarLimiteDatasetsGraficoContinuo(datasets);
+      }
+
+      function renderizarGrafico() {
+        const canvas = byId('graficoDeuda');
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+
+        actualizarBotonesVistaGrafico();
+        if (graficoInstance) graficoInstance.destroy();
+
+        const datasets = construirDatasetsGraficoDeudaContinuo();
+        const fechasEje = obtenerFechasEjeGraficoContinuo(datasets);
+        const rangoMs = fechasEje.length > 1 ? (fechasEje[fechasEje.length - 1] - fechasEje[0]) : 0;
+        const pasoEtiquetas = fechasEje.length > GRAFICO_MAX_AXIS_LABELS
+          ? Math.ceil(fechasEje.length / GRAFICO_MAX_AXIS_LABELS)
+          : 1;
+        const vistaMensual = vistaGraficoActual === 'mensual' || rangoMs > (180 * DAY_IN_MS);
+        const ahora = normalizarTimestampGraficoPorFecha(Date.now()) || Date.now();
+
+        graficoInstance = new Chart(ctx, {
+          type: 'line',
+          data: {
+            datasets: datasets.length > 0 ? datasets : [{
+              label: 'Total general',
+              data: [
+                { x: ahora, y: 0, marker: false, eventType: 'continuidad' },
+                { x: ahora + DAY_IN_MS, y: 0, marker: false, eventType: 'continuidad' }
+              ],
+              borderColor: '#CBD5E1',
+              backgroundColor: 'rgba(203, 213, 225, 0.12)',
+              borderWidth: 2,
+              fill: true,
+              tension: 0.2,
+              cubicInterpolationMode: 'monotone',
+              pointRadius: 0
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            normalized: true,
+            interaction: {
+              mode: 'nearest',
+              intersect: false
+            },
+            scales: {
+              x: {
+                type: 'time',
+                time: {
+                  unit: vistaMensual ? 'month' : 'day',
+                  round: 'day',
+                  displayFormats: {
+                    day: 'd/M',
+                    month: 'M/yy'
+                  }
+                },
+                grid: {
+                  display: false,
+                  drawBorder: false
+                },
+                ticks: {
+                  source: 'data',
+                  autoSkip: false,
+                  color: '#5B7088',
+                  padding: 8,
+                  callback: (value, index, ticks) => {
+                    if (pasoEtiquetas > 1 && index % pasoEtiquetas !== 0 && index !== ticks.length - 1) {
+                      return '';
+                    }
+                    return formatearFechaGraficoContinuo(value, rangoMs);
+                  }
+                }
+              },
+              y: {
+                beginAtZero: true,
+                grid: {
+                  color: 'rgba(31, 78, 121, 0.10)',
+                  drawBorder: false
+                },
+                ticks: {
+                  color: '#5B7088',
+                  padding: 8,
+                  callback: (value) => fmtCOPCompacto(value)
+                }
+              }
+            },
+            plugins: {
+              legend: {
+                position: 'bottom',
+                labels: {
+                  usePointStyle: true,
+                  pointStyle: 'line',
+                  padding: 16,
+                  color: '#1F2937'
+                }
+              },
+              tooltip: {
+                backgroundColor: 'rgba(17, 24, 39, 0.92)',
+                titleColor: '#F8FAFC',
+                bodyColor: '#F8FAFC',
+                borderColor: 'rgba(255, 255, 255, 0.12)',
+                borderWidth: 1,
+                padding: 12,
+                displayColors: true,
+                callbacks: {
+                  title: (items) => formatearFechaGraficoTooltip(items?.[0]?.raw?.x ?? items?.[0]?.parsed?.x),
+                  label: (context) => `${context.dataset.label}: ${fmtCOP(context.parsed.y)}`
+                }
+              }
+            }
+          }
+        });
+      }
+
       /* ========= LOGROS ========= */
       function verificarLogros() {
         const m = calcularMetricasGlobales();
@@ -1519,6 +2266,7 @@
           tipoCredito: ob.tipoCredito,
           moneda: ob.moneda || 'COP',
           fechaCierre: new Date().toLocaleString('es-CO'),
+          fechaCierreISO: new Date().toISOString(),
           valorCreditoOriginal: ob.valorCredito,
           valorCreditoOriginalCOP: esCreditoUVR(ob) ? obtenerValorCreditoBaseCOP(ob) : Number(ob.valorCredito || 0),
           saldoFinal: ob.saldoActual,
@@ -2532,8 +3280,12 @@
         notificar(`Filtro por ${tipo} disponible próximamente`, 'info');
       };
       window.cambiarVistaGrafico = (vista) => {
+        vistaGraficoActual = vista === 'mensual' ? 'mensual' : 'acumulado';
         renderizarGrafico();
-        notificar(`Vista ${vista}`, 'info');
+      };
+      window.refrescarGraficoManual = () => {
+        renderizarGrafico();
+        notificar('Grafico reconstruido correctamente', 'success');
       };
       window.lanzarConfeti = lanzarConfeti;
 
@@ -2754,6 +3506,16 @@ document.addEventListener('keydown', function(event) {
   const byId = (id) => document.getElementById(id);
   const notify = (message, type = "info") => typeof window.notificar === "function" ? window.notificar(message, type) : undefined;
   const normalizeEmail = (value) => String(value || "").trim().toLowerCase();
+  const isDevelopmentAuthContext = () => {
+    const host = window.location.hostname || "";
+    return window.location.protocol === "file:" || host === "localhost" || host === "127.0.0.1";
+  };
+  const getGoogleButtonWidth = () => {
+    const slot = byId("googleLoginContainer");
+    const slotWidth = Math.floor(slot?.getBoundingClientRect?.().width || 0);
+    if (!slotWidth) return 320;
+    return Math.max(260, Math.min(420, Math.floor(slotWidth * 0.92)));
+  };
 
   function loadUsers() {
     try {
@@ -2945,7 +3707,11 @@ document.addEventListener('keydown', function(event) {
     if (!slot) return;
     if (!APP_CONFIG.googleClientId || !window.google?.accounts?.id) {
       slot.innerHTML = '<button type="button" class="btn btn-outline auth-submit" disabled>Iniciar sesion con Google</button>';
-      if (message) message.textContent = APP_CONFIG.googleClientId ? "Google Identity Services aun no esta disponible." : "Configura window.APP_CONFIG.googleClientId para habilitar el acceso con Google.";
+      if (message) {
+        message.textContent = isDevelopmentAuthContext()
+          ? (APP_CONFIG.googleClientId ? "Google Identity Services aun no esta disponible." : "Configura window.APP_CONFIG.googleClientId para habilitar el acceso con Google.")
+          : "";
+      }
       return;
     }
     window.google.accounts.id.initialize({
@@ -2958,7 +3724,7 @@ document.addEventListener('keydown', function(event) {
     window.google.accounts.id.renderButton(slot, {
       theme: "outline",
       size: "large",
-      width: 320,
+      width: getGoogleButtonWidth(),
       text: "signin_with",
       shape: "pill"
     });
@@ -2995,6 +3761,15 @@ document.addEventListener('keydown', function(event) {
     }
   }
 
+  function ensureAuthFieldVisible(target) {
+    if (window.innerWidth > 768) return;
+    const field = target?.closest?.(".form-group") || target;
+    if (!field || typeof field.scrollIntoView !== "function") return;
+    window.setTimeout(() => {
+      field.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
+    }, 180);
+  }
+
   function openDemographics() {
     if (!currentUser) return;
     const info = currentUser.demographics || {};
@@ -3015,6 +3790,9 @@ document.addEventListener('keydown', function(event) {
 
   function bindAuthUI() {
     document.querySelectorAll(".auth-tab").forEach((button) => button.addEventListener("click", () => setAuthTab(button.dataset.authTab)));
+    document.querySelectorAll("#authScreen input").forEach((input) => {
+      input.addEventListener("focus", () => ensureAuthFieldVisible(input));
+    });
     byId("loginForm")?.addEventListener("submit", async (event) => {
       event.preventDefault();
       const email = normalizeEmail(byId("loginEmail").value);
@@ -3111,6 +3889,11 @@ document.addEventListener('keydown', function(event) {
   function bootAuthLayer() {
     bindAuthUI();
     renderGoogleButton();
+    window.addEventListener("resize", () => {
+      if (!byId("authScreen")?.classList.contains("hidden")) {
+        renderGoogleButton();
+      }
+    });
     if (APP_CONFIG.googleClientId && !window.google?.accounts?.id) {
       let retries = 0;
       const waitForGoogle = window.setInterval(() => {

@@ -7,6 +7,7 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
   <link rel="icon" href="Icono_bola_de_nieve.png" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3"></script>
   <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
@@ -139,11 +140,16 @@
       <div class="card-title">
         <i class="fas fa-chart-line"></i> Evolución de tu deuda
         <div class="card-title-actions">
-          <button class="btn btn-sm btn-outline" onclick="cambiarVistaGrafico('mensual')">Mensual</button>
-          <button class="btn btn-sm btn-outline" onclick="cambiarVistaGrafico('acumulado')">Acumulado</button>
+          <button class="btn btn-sm btn-outline chart-view-btn" data-chart-view="mensual" onclick="cambiarVistaGrafico('mensual')">Mensual</button>
+          <button class="btn btn-sm btn-outline chart-view-btn" data-chart-view="acumulado" onclick="cambiarVistaGrafico('acumulado')">Acumulado</button>
+          <button class="btn btn-sm btn-outline" onclick="refrescarGraficoManual()">
+            <i class="fas fa-rotate-right"></i> Refrescar gráfico
+          </button>
         </div>
       </div>
-      <canvas id="graficoDeuda" style="max-height: 250px; width: 100%;"></canvas>
+      <div class="chart-shell">
+        <canvas id="graficoDeuda"></canvas>
+      </div>
     </div>
 
     <!-- Botón Simulador -->

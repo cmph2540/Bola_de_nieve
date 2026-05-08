@@ -75,7 +75,7 @@
     /* ========= DASHBOARD GRID ========= */
     .dashboard-grid {
       display: grid;
-      grid-template-columns: repeat(4, 1fr);
+      grid-template-columns: repeat(4, minmax(0, 1fr));
       gap: 16px;
       margin-bottom: 24px;
     }
@@ -161,6 +161,8 @@
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+      overflow-wrap: anywhere;
+      word-break: break-word;
     }
 
     .card-trend {
@@ -169,7 +171,8 @@
       display: flex;
       align-items: center;
       gap: 4px;
-      white-space: nowrap;
+      flex-wrap: wrap;
+      line-height: 1.35;
     }
 
     /* Tarjeta especial de libertad financiera */
@@ -332,6 +335,24 @@
       margin-left: auto;
     }
 
+    .chart-view-btn.is-active {
+      background: var(--color-primary);
+      color: white;
+    }
+
+    .chart-shell {
+      position: relative;
+      min-height: 260px;
+      height: clamp(260px, 42vw, 360px);
+      width: 100%;
+    }
+
+    #graficoDeuda {
+      width: 100% !important;
+      height: 100% !important;
+      display: block;
+    }
+
     .filter-grid {
       margin-bottom: 20px;
     }
@@ -353,9 +374,9 @@
       gap: 16px;
     }
 
-    .grid-2 { grid-template-columns: repeat(2, 1fr); }
-    .grid-3 { grid-template-columns: repeat(3, 1fr); }
-    .grid-4 { grid-template-columns: repeat(4, 1fr); }
+    .grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .grid-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 
     @media (max-width: 768px) {
       .dashboard-grid { 
@@ -429,6 +450,8 @@
       transition: var(--transition);
       position: relative;
       overflow: hidden;
+      min-width: 0;
+      white-space: normal;
     }
 
     .btn-primary {
@@ -679,10 +702,12 @@
 
     .obligacion-metrics {
       margin: 16px 0;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
     }
 
     .obligacion-payment-grid {
       margin-top: 16px;
+      grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
     }
 
     .obligacion-preview-grid {
@@ -690,12 +715,14 @@
       background: var(--color-bg);
       padding: 12px;
       border-radius: var(--radius-md);
+      grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
     }
 
     .obligacion-summary-grid {
       margin-top: 8px;
       font-size: 12px;
       color: var(--color-muted);
+      grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
     }
 
     .obligacion-metrics > div,
@@ -703,6 +730,10 @@
     .obligacion-preview-grid > div {
       min-width: 0;
       overflow-wrap: anywhere;
+    }
+
+    .obligacion-actions .btn {
+      flex: 1 1 140px;
     }
 
     /* Escenarios grid - MEJORADO RESPONSIVE */
@@ -1074,7 +1105,7 @@
 
     .cerrada-metrics {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
+      grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 16px;
       padding: 20px;
     }
@@ -1140,7 +1171,7 @@
       background: var(--color-bg);
       border-top: 1px solid var(--color-border);
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
+      grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 16px;
       font-size: 13px;
     }
@@ -1729,6 +1760,7 @@ footer .container {
 .auth-card {
   border-radius: 24px;
   box-shadow: var(--shadow-lg);
+  min-width: 0;
 }
 
 .auth-hero {
@@ -1781,13 +1813,14 @@ footer .container {
 .auth-card {
   background: white;
   padding: 28px;
+  display: grid;
+  gap: 20px;
 }
 
 .auth-tabs {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 10px;
-  margin-bottom: 20px;
 }
 
 .auth-tab {
@@ -1797,6 +1830,8 @@ footer .container {
   border-radius: var(--radius-md);
   padding: 12px 16px;
   font-weight: 700;
+  font-size: 16px;
+  min-height: 44px;
   cursor: pointer;
   transition: var(--transition);
 }
@@ -1812,7 +1847,8 @@ footer .container {
   border-radius: var(--radius-lg);
   background: #F8FBFE;
   border: 1px solid var(--color-border);
-  margin-bottom: 18px;
+  display: grid;
+  gap: 12px;
 }
 
 .auth-helper,
@@ -1820,25 +1856,49 @@ footer .container {
 .field-hint {
   color: var(--color-muted);
   font-size: 12px;
+  line-height: 1.5;
 }
 
 .google-login-slot {
   min-height: 44px;
-  margin: 12px 0 8px;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.google-login-slot > div,
+.google-login-slot > iframe {
+  max-width: 100%;
 }
 
 .auth-form {
   display: grid;
-  gap: 4px;
+  gap: 16px;
+}
+
+.auth-form .form-group {
+  margin-bottom: 0;
+}
+
+.auth-form label {
+  margin-bottom: 8px;
+  font-size: 14px;
+}
+
+.auth-form input {
+  min-height: 48px;
+  font-size: 16px;
 }
 
 .auth-submit {
   width: 100%;
-  margin-top: 8px;
+  margin-top: 0;
+  min-height: 48px;
+  font-size: 16px;
 }
 
 .auth-feedback {
-  margin-top: 16px;
   padding: 12px 14px;
   border-radius: var(--radius-md);
   background: var(--color-warning-light);
@@ -1862,7 +1922,9 @@ footer .container {
   max-width: 760px;
 }
 
+.card,
 .dashboard-card,
+.obligacion-card,
 .cerrada-card,
 .oferta-card,
 .escenario-card,
@@ -1921,6 +1983,17 @@ footer .container {
   .card-title-actions {
     margin-left: 0;
   }
+
+  .card-value,
+  .stat-value,
+  .cerrada-metric-value,
+  .oferta-tasa {
+    white-space: normal;
+  }
+
+  .chart-shell {
+    height: clamp(240px, 48vw, 320px);
+  }
 }
 
 @media (max-width: 768px) {
@@ -1947,11 +2020,84 @@ footer .container {
 
   .auth-screen {
     padding: 16px;
+    overflow-y: auto;
+    align-items: flex-start;
+  }
+
+  .auth-shell {
+    width: min(100%, 520px);
+    gap: 16px;
+    margin: 0 auto;
   }
 
   .auth-hero,
   .auth-card {
     padding: 20px;
+  }
+
+  .auth-hero {
+    display: grid;
+    gap: 16px;
+    text-align: left;
+  }
+
+  .auth-hero h2,
+  .auth-hero p,
+  .auth-helper,
+  .auth-muted,
+  .field-hint {
+    margin: 0;
+  }
+
+  .auth-tabs {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .auth-tab {
+    width: 100%;
+    min-height: 48px;
+  }
+
+  .auth-google {
+    gap: 14px;
+  }
+
+  .google-login-slot {
+    width: 100%;
+  }
+
+  .google-login-slot > div,
+  .google-login-slot > iframe,
+  .google-login-slot .auth-submit {
+    width: min(100%, 420px) !important;
+    min-width: min(90%, 320px) !important;
+  }
+
+  .auth-benefits {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    margin-top: 0;
+  }
+
+  .auth-benefits span {
+    width: 100%;
+    border-radius: var(--radius-md);
+    justify-content: flex-start;
+    padding: 12px 14px;
+    font-size: 15px;
+    line-height: 1.4;
+  }
+
+  .auth-form {
+    gap: 18px;
+  }
+
+  .auth-form input,
+  .auth-submit {
+    width: 100%;
+    font-size: 16px;
   }
 
   .dashboard-grid,
@@ -2024,11 +2170,25 @@ footer .container {
   .dashboard-adjustment {
     margin-top: 4px;
   }
+
+  .chart-shell {
+    min-height: 240px;
+    height: 240px;
+  }
 }
 
 @media (max-width: 480px) {
-  .auth-tabs {
-    grid-template-columns: 1fr;
+  .auth-screen {
+    padding: 12px;
+  }
+
+  .auth-hero,
+  .auth-card {
+    padding: 18px 16px;
+  }
+
+  .auth-benefits span {
+    font-size: 14px;
   }
 
   .dashboard-card .card-label,
