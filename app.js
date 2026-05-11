@@ -61,6 +61,11 @@
         API_TIMEOUT_MS: 8000
       };
 
+      const TIPOS_MOVIMIENTO = {
+        PAGO_CUOTA: 'PAGO_CUOTA',
+        ABONO_CAPITAL: 'ABONO_CAPITAL'
+      };
+
       let uvrActual = UVR_CONFIG.DEFAULT_VALUE;
       let uvrFuenteActual = 'manual';
       let monedaSeleccionada = 'COP'; // COP o UVR
@@ -130,6 +135,19 @@
         const month = String(date.getMonth() + 1).padStart(2, "0");
         const year = date.getFullYear();
         return `${day}/${month}/${year}`;
+      };
+      const formatearDuracionMeses = (totalMeses) => {
+        const meses = Math.max(0, Math.round(Number(totalMeses) || 0));
+        if (meses <= 0) return '0 meses';
+        const anos = Math.floor(meses / 12);
+        const mesesRestantes = meses % 12;
+        if (anos > 0 && mesesRestantes > 0) {
+          return `${anos} ${anos === 1 ? 'año' : 'años'} y ${mesesRestantes} ${mesesRestantes === 1 ? 'mes' : 'meses'}`;
+        }
+        if (anos > 0) {
+          return `${anos} ${anos === 1 ? 'año' : 'años'}`;
+        }
+        return `${mesesRestantes} ${mesesRestantes === 1 ? 'mes' : 'meses'}`;
       };
       const parseStoredDate = (value) => {
         if (!value) return null;
@@ -446,9 +464,18 @@
       function normalizarAbonoHistorico(ob, abono) {
         if (!abono) return abono;
 
+        const tipoMovimiento = abono.tipoMovimiento === TIPOS_MOVIMIENTO.ABONO_CAPITAL
+          ? TIPOS_MOVIMIENTO.ABONO_CAPITAL
+          : TIPOS_MOVIMIENTO.PAGO_CUOTA;
+        const cuotaPagadaCOP = esNumeroFinito(abono.cuotaPagadaCOP)
+          ? Number(abono.cuotaPagadaCOP)
+          : roundTo(Number(abono.amortizacionCuota || 0) + Number(abono.interesPeriodo || 0), 2);
+
         if (!esCreditoUVR(ob)) {
           return {
             ...abono,
+            tipoMovimiento,
+            cuotaPagadaCOP,
             montoAbonoCOP: esNumeroFinito(abono.montoAbonoCOP) ? Number(abono.montoAbonoCOP) : Number(abono.monto || 0),
             ahorroInteresesCOPReales: esNumeroFinito(abono.ahorroInteresesCOPReales) ? Number(abono.ahorroInteresesCOPReales) : Number(abono.ahorroIntereses || 0)
           };
@@ -461,6 +488,9 @@
 
         return {
           ...abono,
+          tipoMovimiento,
+          cuotaPagadaCOP,
+          cuotaPagadaUVR: esNumeroFinito(abono.cuotaPagadaUVR) ? Number(abono.cuotaPagadaUVR) : 0,
           uvrOperacion,
           montoAbonoUVR,
           montoAbonoCOP: esNumeroFinito(abono.montoAbonoCOP) ? Number(abono.montoAbonoCOP) : uvrToCop(montoAbonoUVR, uvrOperacion),
@@ -531,6 +561,46 @@
         if (!abono) return 0;
         if (!esCreditoUVR(ob)) return Number(abono.ahorroInteresesCOPReales || abono.ahorroIntereses || 0);
         return Number(abono.ahorroInteresesCOPReales || 0);
+      }
+
+      function normalizarTipoMovimiento(tipoMovimiento) {
+        return tipoMovimiento === TIPOS_MOVIMIENTO.ABONO_CAPITAL
+          ? TIPOS_MOVIMIENTO.ABONO_CAPITAL
+          : TIPOS_MOVIMIENTO.PAGO_CUOTA;
+      }
+
+      function esMovimientoAbonoCapital(movimiento) {
+        return normalizarTipoMovimiento(movimiento?.tipoMovimiento) === TIPOS_MOVIMIENTO.ABONO_CAPITAL;
+      }
+
+      function obtenerEtiquetaTipoMovimiento(movimiento, ob = null) {
+        if (esMovimientoAbonoCapital(movimiento)) return 'Abono a capital';
+        const abonoCapital = ob ? obtenerMontoAbonoCOP(ob, movimiento) : Number(movimiento?.montoAbonoCOP || movimiento?.monto || 0);
+        return abonoCapital > 0 ? 'Pago de cuota + abono' : 'Pago de cuota';
+      }
+
+      function contarMovimientosCapital(ob, historico = ob?.historicoAbonos || []) {
+        return historico.reduce((total, movimiento) => {
+          const aplicaCapital = esMovimientoAbonoCapital(movimiento) || obtenerMontoAbonoCOP(ob, movimiento) > 0;
+          return total + (aplicaCapital ? 1 : 0);
+        }, 0);
+      }
+
+      function formatearMontoMovimiento(ob, montoCOP = 0, montoUVR = 0) {
+        if (esCreditoUVR(ob) && Number(montoUVR || 0) > 0) {
+          return formatearDualUVR(montoUVR, montoCOP);
+        }
+        return fmtCOP(montoCOP);
+      }
+
+      function formatearSaldoPosteriorMovimiento(ob, movimiento) {
+        const saldoCOP = esNumeroFinito(movimiento?.saldoPosteriorCOP)
+          ? Number(movimiento.saldoPosteriorCOP)
+          : Number(movimiento?.saldoPosterior || 0);
+        if (esCreditoUVR(ob) && esNumeroFinito(movimiento?.saldoPosteriorUVR)) {
+          return formatearDualUVR(Number(movimiento.saldoPosteriorUVR || 0), saldoCOP);
+        }
+        return fmtCOP(saldoCOP);
       }
 
       function obtenerSaldoEdicionCOP(ob) {
@@ -869,7 +939,246 @@
         };
       }
 
-      /* ========= FUNCIÓN CORREGIDA PARA CÁLCULO DE ABONO (SOLO ESTO CAMBIÓ) ========= */
+      /* ========= SIMULACIONES DE AHORRO CON ABONO CONSTANTE ========= */
+      function simularPlanPagosConstantesCOP({
+        saldoInicial,
+        em,
+        valorCuota,
+        abonoConstanteCOP = 0,
+        maxMeses = UVR_CONFIG.MAX_SIMULATION_MONTHS
+      }) {
+        const warnings = [];
+        const cuota = Math.max(0, Number(valorCuota) || 0);
+        const abonoConstante = Math.max(0, Number(abonoConstanteCOP) || 0);
+        let saldo = Math.max(0, Number(saldoInicial) || 0);
+        let totalInteresesCOP = 0;
+        let totalCuotasCOP = 0;
+        let totalAbonosCOP = 0;
+        let meses = 0;
+        let amortiza = true;
+
+        if (saldo <= 0) {
+          return {
+            meses: 0,
+            saldoFinal: 0,
+            totalInteresesCOP: 0,
+            totalCuotasCOP: 0,
+            totalAbonosCOP: 0,
+            totalPagadoCOP: 0,
+            warnings,
+            amortiza: true
+          };
+        }
+
+        for (let i = 0; i < maxMeses && saldo > 0.01; i++) {
+          const interesPeriodo = saldo * em;
+          const cuotaAplicada = Math.min(cuota, saldo + interesPeriodo);
+          const amortizacionCuota = Math.max(0, cuotaAplicada - interesPeriodo);
+          const saldoTrasCuota = Math.max(0, saldo - amortizacionCuota);
+          const abonoAplicado = Math.min(abonoConstante, saldoTrasCuota);
+
+          if (amortizacionCuota <= 0 && abonoAplicado <= 0) {
+            amortiza = false;
+            pushWarning(warnings, 'La cuota actual no amortiza capital en el escenario base.');
+            break;
+          }
+
+          saldo = Math.max(0, saldoTrasCuota - abonoAplicado);
+          totalInteresesCOP += interesPeriodo;
+          totalCuotasCOP += cuotaAplicada;
+          totalAbonosCOP += abonoAplicado;
+          meses++;
+        }
+
+        return {
+          meses,
+          saldoFinal: roundTo(Math.max(0, saldo), 2),
+          totalInteresesCOP: roundTo(totalInteresesCOP, 2),
+          totalCuotasCOP: roundTo(totalCuotasCOP, 2),
+          totalAbonosCOP: roundTo(totalAbonosCOP, 2),
+          totalPagadoCOP: roundTo(totalCuotasCOP + totalAbonosCOP, 2),
+          warnings,
+          amortiza
+        };
+      }
+
+      function simularPlanPagosConstantesUVR({
+        saldoInicialUVR,
+        tasaEARealDec,
+        cuotaUVR,
+        abonoConstanteCOP = 0,
+        inflacionEsperadaEA,
+        valorUVRBase,
+        fechaUVRBase,
+        fechaInicio,
+        maxMeses = UVR_CONFIG.MAX_SIMULATION_MONTHS
+      }) {
+        const warnings = [];
+        const em = eaToEm(Number(tasaEARealDec) || 0);
+        const inflacionPct = sanearInflacionPct(inflacionEsperadaEA, warnings);
+        const inflacionDec = parsePctToDec(inflacionPct);
+        const uvrBase = sanearValorUvr(valorUVRBase, warnings);
+        const fechaBase = toIsoDate(fechaUVRBase || hoyISO(), hoyISO());
+        const fechaPrimerPago = toIsoDate(fechaInicio || addMonthsIso(fechaBase, 1), addMonthsIso(fechaBase, 1));
+        const cuota = Math.max(0, Number(cuotaUVR) || 0);
+        const abonoConstante = Math.max(0, Number(abonoConstanteCOP) || 0);
+
+        let saldo = Math.max(0, Number(saldoInicialUVR) || 0);
+        let totalInteresesUVR = 0;
+        let totalInteresesCOP = 0;
+        let totalCuotasCOP = 0;
+        let totalAbonosCOP = 0;
+        let totalAbonosUVR = 0;
+        let meses = 0;
+        let amortiza = true;
+
+        const valorUvrPrimerPago = proyectarUVRPorInflacion(uvrBase, inflacionDec, fechaBase, fechaPrimerPago);
+        const abonoConstanteUVRAproximado = abonoConstante > 0
+          ? roundTo(copToUvr(abonoConstante, valorUvrPrimerPago), 8)
+          : 0;
+
+        if (saldo <= UVR_CONFIG.EPSILON_UVR) {
+          return {
+            meses: 0,
+            saldoFinalUVR: 0,
+            totalInteresesUVR: 0,
+            totalInteresesCOP: 0,
+            totalCuotasCOP: 0,
+            totalAbonosCOP: 0,
+            totalAbonosUVR: 0,
+            totalPagadoCOP: 0,
+            warnings,
+            amortiza: true,
+            abonoConstanteUVRAproximado
+          };
+        }
+
+        for (let i = 0; i < maxMeses && saldo > UVR_CONFIG.EPSILON_UVR; i++) {
+          const fechaCuota = addMonthsIso(fechaPrimerPago, i);
+          const valorUvrPeriodo = proyectarUVRPorInflacion(uvrBase, inflacionDec, fechaBase, fechaCuota);
+          const interesUVR = saldo * em;
+          const cuotaAplicadaUVR = Math.min(cuota, saldo + interesUVR);
+          const amortizacionCuotaUVR = Math.max(0, cuotaAplicadaUVR - interesUVR);
+          const saldoTrasCuotaUVR = Math.max(0, saldo - amortizacionCuotaUVR);
+          const abonoAplicadoUVR = abonoConstante > 0
+            ? Math.min(copToUvr(abonoConstante, valorUvrPeriodo), saldoTrasCuotaUVR)
+            : 0;
+
+          if (amortizacionCuotaUVR <= UVR_CONFIG.EPSILON_UVR && abonoAplicadoUVR <= UVR_CONFIG.EPSILON_UVR) {
+            amortiza = false;
+            pushWarning(warnings, 'La cuota UVR no amortiza capital bajo los supuestos actuales.');
+            break;
+          }
+
+          saldo = Math.max(0, saldoTrasCuotaUVR - abonoAplicadoUVR);
+          totalInteresesUVR += interesUVR;
+          totalInteresesCOP += uvrToCop(interesUVR, valorUvrPeriodo);
+          totalCuotasCOP += uvrToCop(cuotaAplicadaUVR, valorUvrPeriodo);
+          totalAbonosCOP += uvrToCop(abonoAplicadoUVR, valorUvrPeriodo);
+          totalAbonosUVR += abonoAplicadoUVR;
+          meses++;
+        }
+
+        return {
+          meses,
+          saldoFinalUVR: roundTo(Math.max(0, saldo), 8),
+          totalInteresesUVR: roundTo(totalInteresesUVR, 8),
+          totalInteresesCOP: roundTo(totalInteresesCOP, 2),
+          totalCuotasCOP: roundTo(totalCuotasCOP, 2),
+          totalAbonosCOP: roundTo(totalAbonosCOP, 2),
+          totalAbonosUVR: roundTo(totalAbonosUVR, 8),
+          totalPagadoCOP: roundTo(totalCuotasCOP + totalAbonosCOP, 2),
+          warnings,
+          amortiza,
+          abonoConstanteUVRAproximado
+        };
+      }
+
+      function simularEscenarioConstanteObligacion(ob, abonoConstanteCOP = 0) {
+        const fechaInicio = obtenerFechaInicioProyeccionObligacion(ob);
+        if (!ob || Number(ob?.saldoActual || 0) <= 0) {
+          return {
+            meses: 0,
+            fechaInicio,
+            fechaFinIso: null,
+            fechaFinTexto: 'Sin proyección',
+            totalInteresesCOP: 0,
+            totalCuotasCOP: 0,
+            totalAbonosCOP: 0,
+            totalPagadoCOP: 0,
+            warnings: [],
+            amortiza: true,
+            abonoConstanteUVRAproximado: 0
+          };
+        }
+
+        const abonoSeguro = Math.max(0, Number(abonoConstanteCOP) || 0);
+
+        if (esCreditoUVR(ob)) {
+          const warnings = [];
+          const contexto = obtenerContextoUVR(ob, warnings);
+          const simulacion = simularPlanPagosConstantesUVR({
+            saldoInicialUVR: Number(ob.saldoActual || 0),
+            tasaEARealDec: parsePctToDec(ob.interesEA),
+            cuotaUVR: Number(ob.valorCuota || 0),
+            abonoConstanteCOP: abonoSeguro,
+            inflacionEsperadaEA: contexto.inflacionEsperadaEA,
+            valorUVRBase: contexto.valorUVRBase,
+            fechaUVRBase: contexto.fechaUVRBase,
+            fechaInicio
+          });
+          const fechaFinIso = simulacion.amortiza && simulacion.meses > 0
+            ? addMonthsIso(fechaInicio, Math.max(0, simulacion.meses - 1))
+            : null;
+          return {
+            ...simulacion,
+            fechaInicio,
+            fechaFinIso,
+            fechaFinTexto: fechaFinIso ? formatearFechaProyeccion(fechaFinIso) : 'Sin proyección',
+            warnings: [...warnings, ...(simulacion.warnings || [])]
+          };
+        }
+
+        const simulacion = simularPlanPagosConstantesCOP({
+          saldoInicial: Number(ob.saldoActual || 0),
+          em: eaToEm(parsePctToDec(ob.interesEA)),
+          valorCuota: Number(ob.valorCuota || 0),
+          abonoConstanteCOP: abonoSeguro
+        });
+        const fechaFinIso = simulacion.amortiza && simulacion.meses > 0
+          ? addMonthsIso(fechaInicio, Math.max(0, simulacion.meses - 1))
+          : null;
+
+        return {
+          ...simulacion,
+          fechaInicio,
+          fechaFinIso,
+          fechaFinTexto: fechaFinIso ? formatearFechaProyeccion(fechaFinIso) : 'Sin proyección',
+          abonoConstanteUVRAproximado: 0
+        };
+      }
+
+      function compararEscenariosAbonoConstante(ob, abonoConstanteCOP = 0) {
+        const abonoSeguro = Math.max(0, Number(abonoConstanteCOP) || 0);
+        const simulacionBase = simularEscenarioConstanteObligacion(ob, 0);
+        const simulacionConAbonos = simularEscenarioConstanteObligacion(ob, abonoSeguro);
+        const ahorroTotal = Math.max(0, roundTo(simulacionBase.totalPagadoCOP - simulacionConAbonos.totalPagadoCOP, 2));
+        const reduccionIntereses = Math.max(0, roundTo(simulacionBase.totalInteresesCOP - simulacionConAbonos.totalInteresesCOP, 2));
+        const mesesReducidos = Math.max(0, Math.round((simulacionBase.meses || 0) - (simulacionConAbonos.meses || 0)));
+
+        return {
+          abonoConstanteCOP: abonoSeguro,
+          simulacionBase,
+          simulacionConAbonos,
+          ahorroTotal,
+          reduccionIntereses,
+          mesesReducidos,
+          tiempoReducidoTexto: formatearDuracionMeses(mesesReducidos),
+          warnings: [...new Set([...(simulacionBase.warnings || []), ...(simulacionConAbonos.warnings || [])])]
+        };
+      }
+
+      /* ========= CÁLCULO DE PAGO DEL PERIODO Y ABONO APLICADO ========= */
       function calcularPagoPeriodoYAbono(ob, montoAbonoCOP, modoRecalculo) {
         const ea = parsePctToDec(ob.interesEA);
         const em = eaToEm(ea);
@@ -1051,6 +1360,174 @@
         };
       }
 
+      function calcularAbonoSoloCapital(ob, montoAbonoCOP, modoRecalculo) {
+        const ea = parsePctToDec(ob.interesEA);
+        const em = eaToEm(ea);
+        const montoAbonoCOPSeguro = Math.max(0, Number(montoAbonoCOP) || 0);
+        const cuotaActualizada = Math.max(1, Number(ob.numeroCuota || 1));
+        const fechaProximaCuota = obtenerFechaInicioProyeccionObligacion(ob);
+
+        if (esCreditoUVR(ob)) {
+          const warnings = [];
+          const contexto = obtenerContextoUVR(ob, warnings);
+          const saldoActualUVR = Number(ob.saldoActual || 0);
+          const cuotaUVR = Number(ob.valorCuota || 0);
+          const fechaOperacion = hoyISO();
+          const uvrOperacion = obtenerUVRProyectadaObligacion(ob, fechaOperacion, warnings);
+
+          let montoAbonoUVR = montoAbonoCOPSeguro > 0 ? copToUvr(montoAbonoCOPSeguro, uvrOperacion) : 0;
+          if (montoAbonoUVR > saldoActualUVR) {
+            pushWarning(warnings, 'El abono supera el saldo actual. Se aplico solo el saldo restante.');
+            montoAbonoUVR = saldoActualUVR;
+          }
+
+          const saldoTrasAbonoUVR = Math.max(0, saldoActualUVR - montoAbonoUVR);
+          const baseFutura = simularPlanPagosUVR({
+            saldoInicialUVR: saldoActualUVR,
+            tasaEARealDec: ea,
+            cuotaUVR,
+            inflacionEsperadaEA: contexto.inflacionEsperadaEA,
+            valorUVRBase: contexto.valorUVRBase,
+            fechaUVRBase: contexto.fechaUVRBase,
+            fechaInicio: fechaProximaCuota
+          });
+
+          let nuevaCuotaUVR = cuotaUVR;
+          let conAbono;
+          let nuevoPlazo = baseFutura.meses;
+
+          if (modoRecalculo === 'mantener_plazo') {
+            nuevaCuotaUVR = saldoTrasAbonoUVR > 0 && baseFutura.meses > 0
+              ? calcularCuotaFijaUVR(saldoTrasAbonoUVR, ea, baseFutura.meses)
+              : 0;
+            conAbono = simularPlanPagosUVR({
+              saldoInicialUVR: saldoTrasAbonoUVR,
+              tasaEARealDec: ea,
+              cuotaUVR: nuevaCuotaUVR,
+              inflacionEsperadaEA: contexto.inflacionEsperadaEA,
+              valorUVRBase: contexto.valorUVRBase,
+              fechaUVRBase: contexto.fechaUVRBase,
+              fechaInicio: fechaProximaCuota
+            });
+            nuevoPlazo = baseFutura.meses;
+          } else {
+            conAbono = simularPlanPagosUVR({
+              saldoInicialUVR: saldoTrasAbonoUVR,
+              tasaEARealDec: ea,
+              cuotaUVR,
+              inflacionEsperadaEA: contexto.inflacionEsperadaEA,
+              valorUVRBase: contexto.valorUVRBase,
+              fechaUVRBase: contexto.fechaUVRBase,
+              fechaInicio: fechaProximaCuota
+            });
+            nuevoPlazo = conAbono.meses;
+            if (saldoTrasAbonoUVR > 0 && saldoTrasAbonoUVR < nuevaCuotaUVR) {
+              nuevaCuotaUVR = saldoTrasAbonoUVR;
+            }
+          }
+
+          warnings.push(...baseFutura.warnings, ...conAbono.warnings);
+
+          const ahorroInteresesUVR = Math.max(0, baseFutura.totalInteresesUVR - conAbono.totalInteresesUVR);
+          const ahorroInteresesCOPReales = roundTo(uvrToCop(ahorroInteresesUVR, uvrOperacion), 2);
+          const ahorroInteresesCOPNominales = Math.max(0, baseFutura.totalInteresesCOPNominales - conAbono.totalInteresesCOPNominales);
+          const mesesAhorrados = modoRecalculo === 'mantener_plazo' ? 0 : Math.max(0, baseFutura.meses - conAbono.meses);
+          const uvrSiguiente = proyectarUVRPorInflacion(
+            contexto.valorUVRBase,
+            contexto.inflacionEsperadaDec,
+            contexto.fechaUVRBase,
+            fechaProximaCuota
+          );
+
+          return {
+            moneda: 'UVR',
+            tipoMovimiento: TIPOS_MOVIMIENTO.ABONO_CAPITAL,
+            uvrOperacion,
+            warnings,
+            interesPeriodo: 0,
+            interesPeriodoCOP: 0,
+            amortizacionCuota: 0,
+            amortizacionCuotaCOP: 0,
+            cuotaPagadaUVR: 0,
+            cuotaPagadaCOP: 0,
+            montoAbonoUVR: roundTo(montoAbonoUVR, 8),
+            montoAbonoCOPReal: roundTo(uvrToCop(montoAbonoUVR, uvrOperacion), 2),
+            saldoTrasCuota: roundTo(saldoActualUVR, 8),
+            saldoTrasCuotaCOP: roundTo(uvrToCop(saldoActualUVR, uvrOperacion), 2),
+            saldoTrasAbono: roundTo(saldoTrasAbonoUVR, 8),
+            saldoTrasAbonoCOP: roundTo(uvrToCop(saldoTrasAbonoUVR, uvrOperacion), 2),
+            ahorroIntereses: roundTo(ahorroInteresesUVR, 8),
+            ahorroInteresesCOPReales,
+            ahorroInteresesCOPNominales: roundTo(ahorroInteresesCOPNominales, 2),
+            mesesAhorrados,
+            nuevaCuota: roundTo(nuevaCuotaUVR, 8),
+            nuevaCuotaCOP: roundTo(uvrToCop(nuevaCuotaUVR, uvrSiguiente), 2),
+            nuevoPlazo,
+            valorUvrSiguiente: roundTo(uvrSiguiente, 8),
+            cuotaActualizada
+          };
+        }
+
+        const saldoActual = Number(ob.saldoActual || 0);
+        const valorCuota = Number(ob.valorCuota || 0);
+        const montoAbonoAplicado = Math.min(montoAbonoCOPSeguro, saldoActual);
+        const saldoTrasAbono = Math.max(0, saldoActual - montoAbonoAplicado);
+        const base = simularIntereses(saldoActual, em, valorCuota, UVR_CONFIG.MAX_SIMULATION_MONTHS, ob.moneda);
+
+        let nuevaCuota = valorCuota;
+        let conAbono;
+        let nuevoPlazo = base.meses;
+        const warnings = [];
+
+        if (montoAbonoCOPSeguro > montoAbonoAplicado) {
+          pushWarning(warnings, 'El abono supera el saldo actual. Se aplico solo el saldo restante.');
+        }
+
+        if (modoRecalculo === 'mantener_plazo') {
+          nuevaCuota = saldoTrasAbono > 0 && base.meses > 0
+            ? roundTo(calcularCuotaNivelada(saldoTrasAbono, em, base.meses), 2)
+            : 0;
+          conAbono = simularIntereses(saldoTrasAbono, em, nuevaCuota, UVR_CONFIG.MAX_SIMULATION_MONTHS, ob.moneda);
+          nuevoPlazo = base.meses;
+        } else {
+          conAbono = simularIntereses(saldoTrasAbono, em, valorCuota, UVR_CONFIG.MAX_SIMULATION_MONTHS, ob.moneda);
+          nuevoPlazo = conAbono.meses;
+          if (saldoTrasAbono > 0 && saldoTrasAbono < nuevaCuota && saldoTrasAbono < valorCuota) {
+            nuevaCuota = saldoTrasAbono;
+          }
+        }
+
+        const ahorro = Math.max(0, base.interesesAcum - conAbono.interesesAcum);
+        const mesesAhorrados = modoRecalculo === 'mantener_plazo' ? 0 : Math.max(0, base.meses - conAbono.meses);
+
+        return {
+          moneda: ob.moneda,
+          tipoMovimiento: TIPOS_MOVIMIENTO.ABONO_CAPITAL,
+          warnings,
+          interesPeriodo: 0,
+          interesPeriodoCOP: 0,
+          amortizacionCuota: 0,
+          amortizacionCuotaCOP: 0,
+          cuotaPagadaUVR: 0,
+          cuotaPagadaCOP: 0,
+          montoAbonoUVR: 0,
+          montoAbonoCOPReal: montoAbonoAplicado,
+          saldoTrasCuota: saldoActual,
+          saldoTrasCuotaCOP: saldoActual,
+          saldoTrasAbono,
+          saldoTrasAbonoCOP: saldoTrasAbono,
+          ahorroIntereses: ahorro,
+          ahorroInteresesCOPReales: ahorro,
+          ahorroInteresesCOPNominales: ahorro,
+          mesesAhorrados,
+          nuevaCuota,
+          nuevaCuotaCOP: nuevaCuota,
+          nuevoPlazo,
+          valorUvrSiguiente: uvrActual,
+          cuotaActualizada
+        };
+      }
+
       /* ========= MÉTRICAS ========= */
       function calcularMetricasGlobales() {
         const activas = obligaciones.filter(ob => ob.saldoActual > 0);
@@ -1194,7 +1671,7 @@
           mesesRestantes,
           saldoActualCOP,
           cuotaMensualCOP,
-          numeroAbonos: abonosHistoricos.length,
+          numeroAbonos: contarMovimientosCapital(ob, abonosHistoricos),
           esProyectable,
           warnings
         };
@@ -1587,25 +2064,23 @@
         });
       }
 
+      function obtenerObligacionesActivasParaGrafico() {
+        return obligaciones.filter((ob) => ob && !ob.cerrada);
+      }
+
       function obtenerTopObligacionesParaGrafico() {
-        return obligaciones
-          .filter((ob) => Number(ob?.saldoActual || 0) > 0)
+        return obtenerObligacionesActivasParaGrafico()
           .map((ob) => ({
             obligacion: ob,
-            saldoActualCOP: esCreditoUVR(ob) ? obtenerSaldoActualCOP(ob) : Number(ob.saldoActual || 0)
+            saldoActualCOP: obtenerSaldoActualCOP(ob)
           }))
           .sort((a, b) => b.saldoActualCOP - a.saldoActualCOP)
           .slice(0, 3);
       }
 
       function construirDatasetsGraficoDeuda() {
-        const obligacionesHistoricas = [
-          ...obligaciones.map((ob) => ({ obligacion: ob, estaCerrada: false })),
-          ...obligacionesCerradas.map((cerrada) => ({
-            obligacion: normalizarObligacionCerrada(cerrada),
-            estaCerrada: true
-          }))
-        ];
+        const obligacionesHistoricas = obtenerObligacionesActivasParaGrafico()
+          .map((obligacion) => ({ obligacion, estaCerrada: false }));
 
         const eventosPorObligacion = obligacionesHistoricas
           .map(({ obligacion, estaCerrada }) => ({
@@ -1919,13 +2394,8 @@
       }
 
       function construirDatasetsGraficoDeudaContinuo() {
-        const obligacionesHistoricas = [
-          ...obligaciones.map((ob) => ({ obligacion: ob, estaCerrada: false })),
-          ...obligacionesCerradas.map((cerrada) => ({
-            obligacion: normalizarObligacionCerrada(cerrada),
-            estaCerrada: true
-          }))
-        ];
+        const obligacionesHistoricas = obtenerObligacionesActivasParaGrafico()
+          .map((obligacion) => ({ obligacion, estaCerrada: false }));
 
         const eventosPorObligacion = obligacionesHistoricas
           .map(({ obligacion, estaCerrada }) => ({
@@ -2130,6 +2600,88 @@
         byId('contadorLogros').textContent = `${logrosDesbloqueados.length}/${LOGROS_CONFIG.length}`;
       }
 
+      function obtenerDescripcionTipoMovimiento(tipoMovimiento) {
+        if (normalizarTipoMovimiento(tipoMovimiento) === TIPOS_MOVIMIENTO.ABONO_CAPITAL) {
+          return 'Reduce solo el saldo pendiente y recalcula la proyeccion futura sin marcar otra cuota pagada.';
+        }
+        return 'Registra el pago de la cuota del periodo y, si indicas un valor, aplica tambien un abono extraordinario a capital.';
+      }
+
+      function renderizarHistorialMovimientosObligacion(ob) {
+        const movimientos = [...(ob?.historicoAbonos || [])].reverse().slice(0, 4);
+        if (movimientos.length === 0) {
+          return '<div class="obligacion-history-empty">Sin movimientos registrados todavia.</div>';
+        }
+
+        return movimientos.map((movimiento) => {
+          const etiqueta = obtenerEtiquetaTipoMovimiento(movimiento, ob);
+          const badgeClass = esMovimientoAbonoCapital(movimiento) ? 'badge-warning' : 'badge-primary';
+          const fechaMovimiento = movimiento?.fecha
+            || formatDateDisplay(parseStoredDate(movimiento?.fechaRegistro) || new Date());
+          const cuotaPagadaCOP = Number(movimiento?.cuotaPagadaCOP || 0);
+          const cuotaPagadaUVR = Number(movimiento?.cuotaPagadaUVR || 0);
+          const abonoCapitalCOP = obtenerMontoAbonoCOP(ob, movimiento);
+          const abonoCapitalUVR = Number(movimiento?.montoAbonoUVR || 0);
+          const ahorroInteresesCOP = obtenerAhorroInteresesCOP(ob, movimiento);
+          const valorPrincipal = esMovimientoAbonoCapital(movimiento)
+            ? formatearMontoMovimiento(ob, abonoCapitalCOP, abonoCapitalUVR)
+            : formatearMontoMovimiento(ob, cuotaPagadaCOP, cuotaPagadaUVR);
+
+          const detalles = [];
+          if (!esMovimientoAbonoCapital(movimiento) && Number(movimiento?.interesPeriodo || 0) > 0) {
+            detalles.push(`Interes: ${fmtCOP(movimiento.interesPeriodo)}`);
+          }
+          if (!esMovimientoAbonoCapital(movimiento) && Number(movimiento?.amortizacionCuota || 0) > 0) {
+            detalles.push(`Capital cuota: ${fmtCOP(movimiento.amortizacionCuota)}`);
+          }
+          if (abonoCapitalCOP > 0) {
+            detalles.push(`Abono capital: ${formatearMontoMovimiento(ob, abonoCapitalCOP, abonoCapitalUVR)}`);
+          }
+          if (ahorroInteresesCOP > 0) {
+            detalles.push(`Ahorro: ${fmtCOP(ahorroInteresesCOP)}`);
+          }
+          if (Number(movimiento?.mesesAhorrados || 0) > 0) {
+            detalles.push(`Tiempo: -${movimiento.mesesAhorrados} mes(es)`);
+          }
+          detalles.push(`Saldo: ${formatearSaldoPosteriorMovimiento(ob, movimiento)}`);
+
+          return `
+            <div class="obligacion-history-item">
+              <div class="obligacion-history-head">
+                <span class="badge ${badgeClass}">${etiqueta}</span>
+                <small>${fechaMovimiento}</small>
+              </div>
+              <div class="obligacion-history-main">${valorPrincipal}</div>
+              <div class="obligacion-history-detail">${detalles.join(' | ')}</div>
+            </div>
+          `;
+        }).join('');
+      }
+
+      window.actualizarTipoMovimientoObligacion = function(id) {
+        const select = byId(`tipoMovimiento_${id}`);
+        const input = byId(`abono_${id}`);
+        const hint = byId(`tipoMovimientoHint_${id}`);
+        const buttonLabel = byId(`btnMovimientoLabel_${id}`);
+        const tipoMovimiento = normalizarTipoMovimiento(select?.value);
+
+        if (input) {
+          input.placeholder = tipoMovimiento === TIPOS_MOVIMIENTO.ABONO_CAPITAL
+            ? 'Abono a capital en COP'
+            : 'Abono extra en COP';
+        }
+
+        if (hint) {
+          hint.textContent = obtenerDescripcionTipoMovimiento(tipoMovimiento);
+        }
+
+        if (buttonLabel) {
+          buttonLabel.textContent = tipoMovimiento === TIPOS_MOVIMIENTO.ABONO_CAPITAL
+            ? 'Registrar abono a capital'
+            : 'Pagar cuota';
+        }
+      };
+
       /* ========= APLICAR ABONO CORREGIDO ========= */
       window.aplicarAbono = function(id) {
         const ob = obligaciones.find(o => o.id === id);
@@ -2137,10 +2689,20 @@
         
         const abonoInput = byId('abono_' + id);
         const modoSelect = byId('modo_' + id);
+        const tipoMovimientoSelect = byId('tipoMovimiento_' + id);
         const montoAbono = Number(abonoInput?.value) || 0;
         const modoRecalculo = modoSelect?.value || 'mantener_cuota';
+        const tipoMovimiento = normalizarTipoMovimiento(tipoMovimientoSelect?.value);
 
-        const r = calcularPagoPeriodoYAbono(ob, montoAbono, modoRecalculo);
+        if (tipoMovimiento === TIPOS_MOVIMIENTO.ABONO_CAPITAL && montoAbono <= 0) {
+          notificar('Ingresa un valor mayor a cero para registrar el abono a capital.', 'warning');
+          return;
+        }
+
+        const cuotaAntes = Number(ob.valorCuota || 0);
+        const r = tipoMovimiento === TIPOS_MOVIMIENTO.ABONO_CAPITAL
+          ? calcularAbonoSoloCapital(ob, montoAbono, modoRecalculo)
+          : calcularPagoPeriodoYAbono(ob, montoAbono, modoRecalculo);
 
         // Actualizar estado
         ob.numeroCuota = r.cuotaActualizada;
@@ -2178,12 +2740,18 @@
         }
 
         // Registrar en histórico
-        if (montoAbono > 0 || r.montoAbonoCOPReal > 0) {
+        const debeRegistrarMovimiento = tipoMovimiento === TIPOS_MOVIMIENTO.ABONO_CAPITAL
+          ? r.montoAbonoCOPReal > 0
+          : r.cuotaPagadaCOP > 0 || r.montoAbonoCOPReal > 0;
+
+        if (debeRegistrarMovimiento) {
           if (!ob.historicoAbonos) ob.historicoAbonos = [];
           const registroAbono = {
+            tipoMovimiento,
             fecha: formatDateDisplay(new Date()),
             fechaRegistro: new Date().toISOString(),
             monto: montoAbono,
+            cuotaPagadaCOP: r.cuotaPagadaCOP,
             montoAbonoCOP: r.montoAbonoCOPReal,
             ahorroIntereses: r.ahorroInteresesCOPReales,
             amortizacionCuota: r.amortizacionCuotaCOP,
@@ -2193,10 +2761,11 @@
             nuevaCuota: ob.valorCuota,
             nuevoPlazo: r.nuevoPlazo,
             mesesAhorrados: r.mesesAhorrados,
-            cuotaAntes: ob.valorCuota
+            cuotaAntes
           };
           
           if (esCreditoUVR(ob)) {
+            registroAbono.cuotaPagadaUVR = r.cuotaPagadaUVR;
             registroAbono.montoAbonoUVR = r.montoAbonoUVR;
             registroAbono.ahorroInteresesUVR = r.ahorroIntereses;
             registroAbono.saldoPosteriorUVR = r.saldoTrasAbono;
@@ -2220,6 +2789,14 @@
           if (r.saldoTrasAbono <= 0) {
             notificar(`🎉 ¡INCREÍBLE! Has liquidado completamente esta deuda`, 'success');
             lanzarConfeti(150);
+          } else if (tipoMovimiento === TIPOS_MOVIMIENTO.ABONO_CAPITAL) {
+            notificar(`Abono a capital registrado por ${fmtCOP(r.montoAbonoCOPReal)}`, 'success');
+            if (r.ahorroInteresesCOPReales > 0) {
+              notificar(`Ahorro proyectado en intereses: ${fmtCOP(r.ahorroInteresesCOPReales)}`, 'success');
+            }
+            if (r.mesesAhorrados > 0) {
+              notificar(`Redujiste tu deuda en ${r.mesesAhorrados} mes(es)`, 'success');
+            }
           } else {
             notificar(`✅ Ahorraste ${fmtCOP(r.ahorroInteresesCOPReales)} en intereses`, 'success');
             if (r.mesesAhorrados > 0) {
@@ -2243,7 +2820,7 @@
         }
 
         const historicoAbonos = ob.historicoAbonos || [];
-        const numeroAbonos = historicoAbonos.length;
+        const numeroAbonos = contarMovimientosCapital(ob, historicoAbonos);
         const totalAbonosCOP = historicoAbonos.reduce((s, a) => s + obtenerMontoAbonoCOP(ob, a), 0);
         const totalInteresesDejadosCOP = historicoAbonos.reduce((s, a) => s + obtenerAhorroInteresesCOP(ob, a), 0);
         const totalAbonosUVR = esCreditoUVR(ob)
@@ -2330,6 +2907,9 @@
           
           const interesesAcum = ob.historicoAbonos?.reduce((s, a) => s + (a.ahorroIntereses || 0), 0) || 0;
           const cuotasAhorradas = ob.historicoAbonos?.reduce((s, a) => s + (a.mesesAhorrados || 0), 0) || 0;
+          const movimientosRegistrados = ob.historicoAbonos?.length || 0;
+          const abonosCapitalRegistrados = contarMovimientosCapital(ob);
+          const historialMovimientos = renderizarHistorialMovimientosObligacion(ob);
           
           const monedaBadge = esCreditoUVR(ob)
             ? '<span class="badge badge-uvr"><i class="fas fa-chart-line"></i> UVR</span>' 
@@ -2368,16 +2948,21 @@
               <div><b>Cuota actual</b><br><span class="cuota-actual">${ob.numeroCuota}/${ob.cantidadCuotas}</span></div>
             </div>
 
-            <div class="grid grid-3 obligacion-payment-grid">
+            <div class="grid grid-4 obligacion-payment-grid">
               <input type="number" id="abono_${ob.id}" class="form-control" placeholder="Abono extra en COP" value="0" min="0" step="10000">
+              <select id="tipoMovimiento_${ob.id}" class="form-control" onchange="actualizarTipoMovimientoObligacion('${ob.id}')">
+                <option value="${TIPOS_MOVIMIENTO.PAGO_CUOTA}">Pago de cuota</option>
+                <option value="${TIPOS_MOVIMIENTO.ABONO_CAPITAL}">Abono a capital</option>
+              </select>
               <select id="modo_${ob.id}" class="form-control">
                 <option value="mantener_cuota">Mantener cuota (menos plazo)</option>
                 <option value="mantener_plazo">Mantener plazo (cuota menor)</option>
               </select>
               <button class="btn btn-secondary" onclick="aplicarAbono('${ob.id}')">
-                <i class="fas fa-check"></i> Pagar cuota
+                <i class="fas fa-check"></i> <span id="btnMovimientoLabel_${ob.id}">Pagar cuota</span>
               </button>
             </div>
+            <div class="obligacion-payment-note" id="tipoMovimientoHint_${ob.id}">${obtenerDescripcionTipoMovimiento(TIPOS_MOVIMIENTO.PAGO_CUOTA)}</div>
 
             <div class="grid grid-4 obligacion-preview-grid">
               <div><b>Nuevo saldo:</b> <input type="text" readonly class="form-control" id="nuevoSaldo_${ob.id}" value="${saldoMostrar}"></div>
@@ -2388,6 +2973,12 @@
             <div class="grid grid-4 obligacion-summary-grid">
               <div>Meses ahorrados: <span id="meses_${ob.id}">${cuotasAhorradas}</span></div>
               <div>Total ahorrado: ${fmtMonto(interesesAcum, ob.moneda)}</div>
+              <div>Movimientos: ${movimientosRegistrados}</div>
+              <div>Abonos a capital: ${abonosCapitalRegistrados}</div>
+            </div>
+            <div class="obligacion-history">
+              <div class="obligacion-history-title">Ultimos movimientos</div>
+              ${historialMovimientos}
             </div>
           </div>
         `}).join('');
@@ -2419,7 +3010,10 @@
           return sum + Number(cerrada.interesesDejadosDePagarCOP || cerrada.interesesDejadosDePagar || 0);
         }, 0);
         const totalCuotas = obligacionesCerradas.reduce((sum, c) => sum + (c.cuotasDejadasDePagar || 0), 0);
-        const totalAbonos = obligacionesCerradas.reduce((sum, c) => sum + (c.numeroAbonos || 0), 0);
+        const totalAbonos = obligacionesCerradas.reduce((sum, c) => {
+          const cerrada = normalizarObligacionCerrada(c);
+          return sum + (c.numeroAbonos || contarMovimientosCapital(cerrada, cerrada.historicoAbonos || []));
+        }, 0);
 
         byId('totalCerradas').textContent = totalCerradas;
         byId('totalInteresesHistoricos').textContent = fmtCOP(totalIntereses);
@@ -2428,7 +3022,7 @@
 
         container.innerHTML = obligacionesCerradas.slice().reverse().map(c => {
           const cerrada = normalizarObligacionCerrada(c);
-          const numeroAbonos = c.numeroAbonos || c.historicoAbonos?.length || 0;
+          const numeroAbonos = c.numeroAbonos || contarMovimientosCapital(cerrada, cerrada.historicoAbonos || []);
           const valorCreditoOriginal = cerrada.valorCreditoOriginal || 0;
           const interesesEnCOP = Number(cerrada.interesesDejadosDePagarCOP || cerrada.interesesDejadosDePagar || 0);
           const valorOriginalEnCOP = Number(cerrada.valorCreditoOriginalCOP || valorCreditoOriginal || 0);
@@ -2612,72 +3206,97 @@
       };
 
       function actualizarLabelSimulador() {
-        const select = byId('simulacionObligacion');
-        const selectedOption = select.options[select.selectedIndex];
-        const moneda = selectedOption?.getAttribute('data-moneda') || 'COP';
         const label = byId('abonoBaseLabel');
-        
-        if (moneda === 'UVR') {
-          label.textContent = 'Abono base (UVR)';
-          byId('simulacionAbono').step = '0.01';
-          byId('simulacionAbono').placeholder = 'Ej: 50.00';
-        } else {
-          label.textContent = 'Abono base (COP)';
-          byId('simulacionAbono').step = '10000';
-          byId('simulacionAbono').placeholder = 'Ej: 50000';
-        }
+        label.textContent = 'Abono constante mensual (COP)';
+        byId('simulacionAbono').step = '10000';
+        byId('simulacionAbono').placeholder = 'Ej: 50000';
       }
 
       window.cerrarSimulador = () => byId('modalSimulador').style.display = 'none';
 
+      function formatearAbonoSimulador(ob, abonoCOP, comparativo) {
+        const montoCOP = fmtCOP(abonoCOP);
+        if (!esCreditoUVR(ob)) return montoCOP;
+        const equivalenteUVR = Number(comparativo?.simulacionConAbonos?.abonoConstanteUVRAproximado || 0);
+        return equivalenteUVR > 0 ? `${montoCOP} | ${fmtUVR(equivalenteUVR)}` : montoCOP;
+      }
+
+      function actualizarResumenComparativoSimulador(ob, comparativo) {
+        if (!ob || !comparativo) return;
+
+        const { simulacionBase, simulacionConAbonos, ahorroTotal, reduccionIntereses, mesesReducidos } = comparativo;
+        const chip = byId('simComparativoAbono');
+        const resumen = byId('simResumenEscenario');
+        const warningBox = byId('simAhorroWarnings');
+        const equivalenteUVR = Number(simulacionConAbonos?.abonoConstanteUVRAproximado || 0);
+
+        if (comparativo.abonoConstanteCOP > 0) {
+          const notaUVR = esCreditoUVR(ob) && equivalenteUVR > 0
+            ? ` (${fmtUVR(equivalenteUVR)} aprox. al inicio)`
+            : '';
+          if (chip) chip.textContent = `${fmtCOP(comparativo.abonoConstanteCOP)}/mes`;
+          if (resumen) resumen.textContent = `Comparación del pago normal frente a un abono extraordinario constante de ${fmtCOP(comparativo.abonoConstanteCOP)}${notaUVR}.`;
+        } else {
+          if (chip) chip.textContent = 'Sin abonos';
+          if (resumen) resumen.textContent = 'Sin abonos extraordinarios configurados. Este escenario coincide con el pago normal.';
+        }
+
+        byId('simTotalSinAbonos').textContent = fmtCOP(simulacionBase.totalPagadoCOP);
+        byId('simTotalConAbonos').textContent = fmtCOP(simulacionConAbonos.totalPagadoCOP);
+        byId('simAhorroTotal').textContent = fmtCOP(ahorroTotal);
+        byId('simTiempoReducido').textContent = comparativo.tiempoReducidoTexto;
+        byId('simInteresesSinAbonos').textContent = fmtCOP(simulacionBase.totalInteresesCOP);
+        byId('simInteresesConAbonos').textContent = fmtCOP(simulacionConAbonos.totalInteresesCOP);
+        byId('simInteresesAhorrados').textContent = fmtCOP(reduccionIntereses);
+        byId('simMesesReducidos').textContent = `${mesesReducidos} mes(es)`;
+        byId('simFechaSinAbonos').textContent = simulacionBase.fechaFinTexto;
+        byId('simFechaConAbonos').textContent = simulacionConAbonos.fechaFinTexto;
+
+        if (warningBox) {
+          const mensajes = comparativo.warnings || [];
+          if (mensajes.length > 0) {
+            warningBox.textContent = mensajes.join(' ');
+            warningBox.style.display = 'block';
+          } else {
+            warningBox.textContent = '';
+            warningBox.style.display = 'none';
+          }
+        }
+      }
+
       window.actualizarSimulacion = function() {
         const obId = byId('simulacionObligacion').value;
-        const base = Number(byId('simulacionAbono').value) || 0;
+        const base = Math.max(0, Number(byId('simulacionAbono').value) || 0);
         const ob = obligaciones.find(o => o.id === obId);
         if (!ob) return;
 
-        const rBase = calcularPagoPeriodoYAbono(ob, base, 'mantener_cuota');
-        const dualBase = esCreditoUVR(ob)
-          ? `${fmtCOP(base)} | ${fmtUVR(rBase.montoAbonoUVR)}`
-          : fmtCOP(base);
-        byId('simBaseAbono').textContent = dualBase;
-        byId('simBasePlazo').textContent = rBase.nuevoPlazo;
-        byId('simBaseAhorro').textContent = esCreditoUVR(ob)
-          ? `${fmtCOP(rBase.ahorroInteresesCOPReales)} | ${fmtUVR(rBase.ahorroIntereses)}`
-          : fmtCOP(rBase.ahorroInteresesCOPReales);
+        const rBase = compararEscenariosAbonoConstante(ob, base);
+        byId('simBaseAbono').textContent = formatearAbonoSimulador(ob, base, rBase);
+        byId('simBasePlazo').textContent = rBase.simulacionConAbonos.meses;
+        byId('simBaseAhorro').textContent = fmtCOP(rBase.ahorroTotal);
 
-        const r25 = calcularPagoPeriodoYAbono(ob, base * 1.25, 'mantener_cuota');
-        const dual25 = esCreditoUVR(ob)
-          ? `${fmtCOP(base * 1.25)} | ${fmtUVR(r25.montoAbonoUVR)}`
-          : fmtCOP(base * 1.25);
-        byId('sim25Abono').textContent = dual25;
-        byId('sim25Plazo').textContent = r25.nuevoPlazo;
-        byId('sim25Ahorro').textContent = esCreditoUVR(ob)
-          ? `${fmtCOP(r25.ahorroInteresesCOPReales)} | ${fmtUVR(r25.ahorroIntereses)}`
-          : fmtCOP(r25.ahorroInteresesCOPReales);
+        const r25 = compararEscenariosAbonoConstante(ob, base * 1.25);
+        byId('sim25Abono').textContent = formatearAbonoSimulador(ob, base * 1.25, r25);
+        byId('sim25Plazo').textContent = r25.simulacionConAbonos.meses;
+        byId('sim25Ahorro').textContent = fmtCOP(r25.ahorroTotal);
 
-        const r50 = calcularPagoPeriodoYAbono(ob, base * 1.5, 'mantener_cuota');
-        const dual50 = esCreditoUVR(ob)
-          ? `${fmtCOP(base * 1.5)} | ${fmtUVR(r50.montoAbonoUVR)}`
-          : fmtCOP(base * 1.5);
-        byId('sim50Abono').textContent = dual50;
-        byId('sim50Plazo').textContent = r50.nuevoPlazo;
-        byId('sim50Ahorro').textContent = esCreditoUVR(ob)
-          ? `${fmtCOP(r50.ahorroInteresesCOPReales)} | ${fmtUVR(r50.ahorroIntereses)}`
-          : fmtCOP(r50.ahorroInteresesCOPReales);
+        const r50 = compararEscenariosAbonoConstante(ob, base * 1.5);
+        byId('sim50Abono').textContent = formatearAbonoSimulador(ob, base * 1.5, r50);
+        byId('sim50Plazo').textContent = r50.simulacionConAbonos.meses;
+        byId('sim50Ahorro').textContent = fmtCOP(r50.ahorroTotal);
 
         actualizarSimulacionPersonalizada();
       };
 
       window.actualizarSimulacionPersonalizada = function() {
         const obId = byId('simulacionObligacion').value;
-        const base = Number(byId('simulacionAbono').value) || 0;
+        const base = Math.max(0, Number(byId('simulacionAbono').value) || 0);
         const pct = Number(byId('simulacionPorcentaje').value) / 100;
         const ob = obligaciones.find(o => o.id === obId);
         if (!ob) return;
 
         const abonoCustom = base * (1 + pct);
-        const r = calcularPagoPeriodoYAbono(ob, abonoCustom, 'mantener_cuota');
+        const comparativo = compararEscenariosAbonoConstante(ob, abonoCustom);
         
         byId('simulacionPorcentajeValor').textContent = `${Math.round(pct * 100)}%`;
         const porcentajeCustom = byId('porcentajeCustom');
@@ -2688,24 +3307,20 @@
         else if (pct <= 0.75) porcentajeCustom.style.background = 'var(--color-secondary)';
         else porcentajeCustom.style.background = 'var(--color-accent)';
         
-        byId('simCustomAbono').textContent = esCreditoUVR(ob)
-          ? `${fmtCOP(abonoCustom)} | ${fmtUVR(r.montoAbonoUVR)}`
-          : fmtCOP(abonoCustom);
-        byId('simCustomPlazo').textContent = r.nuevoPlazo;
-        byId('simCustomAhorro').textContent = esCreditoUVR(ob)
-          ? `${fmtCOP(r.ahorroInteresesCOPReales)} | ${fmtUVR(r.ahorroIntereses)}`
-          : fmtCOP(r.ahorroInteresesCOPReales);
+        byId('simCustomAbono').textContent = formatearAbonoSimulador(ob, abonoCustom, comparativo);
+        byId('simCustomPlazo').textContent = comparativo.simulacionConAbonos.meses;
+        byId('simCustomAhorro').textContent = fmtCOP(comparativo.ahorroTotal);
+        actualizarResumenComparativoSimulador(ob, comparativo);
       };
 
       window.aplicarSimulacion = function() {
         const obId = byId('simulacionObligacion').value;
-        const base = Number(byId('simulacionAbono').value) || 0;
+        const base = Math.max(0, Number(byId('simulacionAbono').value) || 0);
         const pct = Number(byId('simulacionPorcentaje').value) / 100;
         const input = byId(`abono_${obId}`);
-        const ob = obligaciones.find(o => o.id === obId);
+        const valor = Math.round(base * (1 + pct));
         
         if (input) {
-          const valor = Math.round(base * (1 + pct) * (ob?.moneda === 'UVR' ? 100 : 1)) / (ob?.moneda === 'UVR' ? 100 : 1);
           input.value = valor;
           input.classList.add('highlight-pulse');
           setTimeout(() => input.classList.remove('highlight-pulse'), 1000);
@@ -2716,7 +3331,7 @@
           }
         }
         cerrarSimulador();
-        notificar(`✅ Abono de ${fmtMonto(Math.round(base * (1 + pct) * (ob?.moneda === 'UVR' ? 100 : 1)) / (ob?.moneda === 'UVR' ? 100 : 1), ob?.moneda || 'COP')} listo para aplicar`, 'success');
+        notificar(`✅ Abono de ${fmtCOP(valor)} listo para aplicar`, 'success');
       };
 
       /* ========= EXPORTAR A EXCEL ========= */
