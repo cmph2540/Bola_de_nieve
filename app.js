@@ -208,6 +208,39 @@
       let graficoInstance = null;
       let vistaGraficoActual = 'acumulado';
 
+      function obtenerColorLeyendaDataset(dataset) {
+        const color = dataset?.borderColor || dataset?.pointBackgroundColor || dataset?.backgroundColor;
+        return Array.isArray(color) ? color[0] : color;
+      }
+
+      function generarLabelsLeyendaGraficoDeuda(chart) {
+        return (chart.data.datasets || []).map((dataset, index) => {
+          const color = obtenerColorLeyendaDataset(dataset);
+          return {
+            text: dataset.label || '',
+            fillStyle: color,
+            strokeStyle: color,
+            lineWidth: dataset.borderWidth || 2,
+            pointStyle: 'circle',
+            hidden: !chart.isDatasetVisible(index),
+            datasetIndex: index
+          };
+        });
+      }
+
+      function obtenerOpcionesLeyendaGraficoDeuda() {
+        return {
+          position: 'top',
+          labels: {
+            usePointStyle: true,
+            pointStyle: 'circle',
+            padding: 16,
+            color: '#1F2937',
+            generateLabels: generarLabelsLeyendaGraficoDeuda
+          }
+        };
+      }
+
       /* ========= FUNCIONES PARA VIVIENDA Y UVR (TODAS TUS FUNCIONES ORIGINALES) ========= */
       function sanearInflacionPct(inflacionPct, warnings = []) {
         let valor = Number(inflacionPct);
@@ -2225,15 +2258,7 @@
               }
             },
             plugins: {
-              legend: {
-                position: 'bottom',
-                labels: {
-                  usePointStyle: true,
-                  pointStyle: 'line',
-                  padding: 16,
-                  color: '#1F2937'
-                }
-              },
+              legend: obtenerOpcionesLeyendaGraficoDeuda(),
               tooltip: {
                 backgroundColor: 'rgba(17, 24, 39, 0.92)',
                 titleColor: '#F8FAFC',
@@ -2541,15 +2566,7 @@
               }
             },
             plugins: {
-              legend: {
-                position: 'bottom',
-                labels: {
-                  usePointStyle: true,
-                  pointStyle: 'line',
-                  padding: 16,
-                  color: '#1F2937'
-                }
-              },
+              legend: obtenerOpcionesLeyendaGraficoDeuda(),
               tooltip: {
                 backgroundColor: 'rgba(17, 24, 39, 0.92)',
                 titleColor: '#F8FAFC',
