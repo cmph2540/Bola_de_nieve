@@ -3,13 +3,15 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net https://accounts.google.com; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; img-src 'self' data:; font-src 'self' https://cdnjs.cloudflare.com data:; frame-src https://accounts.google.com;">
   <title>Bola de Nieve · Libertad Financiera</title>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" integrity="sha384-5e2ESR8Ycmos6g3gAKr1Jvwye8sW4U1u/cAKulfVJnkakCcMqhOudbtPnvJ+nbv7" crossorigin="anonymous">
   <link rel="icon" href="Icono_bola_de_nieve.png" />
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" integrity="sha384-e6nUZLBkQ86NJ6TVVKAeSaK8jWa3NhkYWZFomE39AvDbQWeie9PlQqM3pmYW5d1g" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3"></script>
   <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1"></script>
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" integrity="sha384-vtjasyidUo0kW94K5MXDXntzOJpQgBKXmE7e2Ga4LG0skTTLeBi97eFAXsqewJjw" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/crypto-js@4.2.0/crypto-js.min.js"></script>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <link rel="stylesheet" href="main.css" />
 </head>
@@ -90,28 +92,28 @@
 
     <!-- ========= DASHBOARD MÃ‰TRICAS ========= -->
     <div class="dashboard-grid" id="dashboardMetrics">
-      <div class="dashboard-card" onclick="filtrarPorMetrica('saldo')">
+      <div class="dashboard-card" data-dashboard-metric="saldo">
         <div class="card-icon">💰</div>
         <div class="card-label" data-tooltip="Suma total de todas tus deudas activas">SALDO TOTAL PENDIENTE</div>
         <div class="card-value" id="totalSaldoPendiente">$0</div>
         <div class="card-trend"><i class="fas fa-arrow-down"></i> Meta: $0</div>
       </div>
       
-      <div class="dashboard-card" onclick="filtrarPorMetrica('intereses')">
+      <div class="dashboard-card" data-dashboard-metric="intereses">
         <div class="card-icon">📉</div>
         <div class="card-label" data-tooltip="Intereses que ya no pagarás gracias a tus abonos extraordinarios">INTERESES AHORRADOS</div>
         <div class="card-value" id="totalInteresesAhorrados">$0</div>
         <div class="card-trend"><i class="fas fa-chart-line"></i> +Último mes</div>
       </div>
       
-      <div class="dashboard-card" onclick="filtrarPorMetrica('capital')">
+      <div class="dashboard-card" data-dashboard-metric="capital">
         <div class="card-icon">📈</div>
         <div class="card-label" data-tooltip="Total de abonos extras realizados a capital">CAPITAL AMORTIZADO</div>
         <div class="card-value" id="totalCapitalAmortizado">$0</div>
         <div class="card-trend"><i class="fas fa-coins"></i> Abonos extras</div>
       </div>
       
-      <div class="dashboard-card" onclick="filtrarPorMetrica('cuotas')">
+      <div class="dashboard-card" data-dashboard-metric="cuotas">
         <div class="card-icon">⏱️</div>
         <div class="card-label" data-tooltip="Cuotas que eliminaste de tu calendario de pagos">CUOTAS EVITADAS</div>
         <div class="card-value" id="totalCuotasEvitadas">0</div>
@@ -140,9 +142,9 @@
       <div class="card-title">
         <i class="fas fa-chart-line"></i> Evolución de tu deuda
         <div class="card-title-actions">
-          <button class="btn btn-sm btn-outline chart-view-btn" data-chart-view="mensual" onclick="cambiarVistaGrafico('mensual')">Mensual</button>
-          <button class="btn btn-sm btn-outline chart-view-btn" data-chart-view="acumulado" onclick="cambiarVistaGrafico('acumulado')">Acumulado</button>
-          <button class="btn btn-sm btn-outline" onclick="refrescarGraficoManual()">
+          <button class="btn btn-sm btn-outline chart-view-btn" data-chart-view="mensual">Mensual</button>
+          <button class="btn btn-sm btn-outline chart-view-btn" data-chart-view="acumulado">Acumulado</button>
+          <button class="btn btn-sm btn-outline" id="btnRefreshChart">
             <i class="fas fa-rotate-right"></i> Refrescar gráfico
           </button>
         </div>
@@ -155,7 +157,7 @@
     <!-- Botón Simulador -->
     <div class="section-header mb-4">
       <h2 class="card-title" style="margin:0;"><i class="fas fa-calculator"></i> Gestión de Obligaciones</h2>
-      <button class="btn btn-primary" onclick="abrirSimulador()">
+      <button class="btn btn-primary" id="btnOpenSimulator">
         <i class="fas fa-chart-pie"></i> Simular escenarios
       </button>
     </div>
@@ -178,7 +180,7 @@
           
           <div class="form-group">
             <label>Tipo de crédito</label>
-            <select id="tipoCredito" required onchange="toggleMonedaVivienda()">
+            <select id="tipoCredito" required>
               <option value="">Selecciona…</option>
               <option value="consumo">Consumo</option>
               <option value="tarjeta">Tarjeta de crédito</option>
@@ -198,10 +200,10 @@
         <div id="monedaViviendaContainer" style="display: none; margin-bottom: 16px;">
           <label>Unidad de valor</label>
           <div class="moneda-selector">
-            <div class="moneda-option selected" id="monedaCopOption" onclick="seleccionarMoneda('COP')">
+            <div class="moneda-option selected" id="monedaCopOption" data-currency="COP">
               <i class="fas fa-coins"></i> Pesos (COP)
             </div>
-            <div class="moneda-option" id="monedaUvrOption" onclick="seleccionarMoneda('UVR')">
+            <div class="moneda-option" id="monedaUvrOption" data-currency="UVR">
               <i class="fas fa-chart-line"></i> UVR
             </div>
           </div>
@@ -361,7 +363,7 @@
       <div class="grid grid-2 filter-grid">
         <div class="form-group">
           <label>Filtrar por tipo de crédito</label>
-          <select id="comparadorTipo" onchange="filtrarOfertas()">
+          <select id="comparadorTipo">
             <option value="todos">Todos los tipos</option>
             <option value="consumo">Consumo</option>
             <option value="tarjeta">Tarjeta de crédito</option>
@@ -371,7 +373,7 @@
           </select>
         </div>
         <div class="filter-grid-action">
-          <button class="btn btn-secondary" id="btnBuscarOfertas" onclick="filtrarOfertas()">
+          <button class="btn btn-secondary" id="btnBuscarOfertas">
             <i class="fas fa-search"></i> Buscar mejores tasas
           </button>
         </div>
@@ -405,16 +407,16 @@
       
       <!-- ✅ NUEVOS ENLACES CON MODALES (YA REEMPLAZADOS) -->
       <div style="display: flex; gap: 25px; font-size: 13px; flex-wrap: wrap;">
-        <a href="#" onclick="abrirModalLegal('terminos'); return false;" style="color: white; opacity: 0.7; text-decoration: none; transition: opacity 0.3s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'">
+        <a href="#" data-legal-modal="terminos" style="color: white; opacity: 0.7; text-decoration: none; transition: opacity 0.3s;">
           <i class="fas fa-file-contract"></i> Términos de uso
         </a>
-        <a href="#" onclick="abrirModalLegal('privacidad'); return false;" style="color: white; opacity: 0.7; text-decoration: none; transition: opacity 0.3s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'">
+        <a href="#" data-legal-modal="privacidad" style="color: white; opacity: 0.7; text-decoration: none; transition: opacity 0.3s;">
           <i class="fas fa-shield-alt"></i> Política de privacidad
         </a>
-        <a href="#" onclick="abrirModalLegal('legal'); return false;" style="color: white; opacity: 0.7; text-decoration: none; transition: opacity 0.3s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'">
+        <a href="#" data-legal-modal="legal" style="color: white; opacity: 0.7; text-decoration: none; transition: opacity 0.3s;">
           <i class="fas fa-gavel"></i> Aviso legal
         </a>
-        <a href="#" onclick="abrirModalLegal('contacto'); return false;" style="color: white; opacity: 0.7; text-decoration: none; transition: opacity 0.3s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'">
+        <a href="#" data-legal-modal="contacto" style="color: white; opacity: 0.7; text-decoration: none; transition: opacity 0.3s;">
           <i class="fas fa-envelope"></i> Contáctanos
         </a>
       </div>
@@ -432,18 +434,18 @@
     <div class="modal-content">
       <div class="modal-header">
         <h2><i class="fas fa-chart-pie"></i> Simular impacto de abono</h2>
-        <button class="modal-close" onclick="cerrarSimulador()">&times;</button>
+        <button class="modal-close" data-close-simulator>&times;</button>
       </div>
       
       <div class="modal-body">
         <div class="grid grid-2" style="grid-template-columns: 1fr 1fr;">
           <div class="form-group">
             <label>Obligación a simular</label>
-            <select id="simulacionObligacion" onchange="actualizarSimulacion()"></select>
+            <select id="simulacionObligacion"></select>
           </div>
           <div class="form-group">
             <label id="abonoBaseLabel">Abono base (COP)</label>
-            <input type="number" id="simulacionAbono" min="0" step="10000" value="50000" oninput="actualizarSimulacion()">
+            <input type="number" id="simulacionAbono" min="0" step="10000" value="50000">
           </div>
         </div>
 
@@ -512,7 +514,7 @@
             <span class="slider-value" id="simulacionPorcentajeValor">0%</span>
           </div>
           
-          <input type="range" id="simulacionPorcentaje" min="0" max="100" value="0" oninput="actualizarSimulacionPersonalizada()">
+          <input type="range" id="simulacionPorcentaje" min="0" max="100" value="0">
           
           <div class="custom-card">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 5px;">
@@ -593,45 +595,48 @@
       </div>
 
       <div class="modal-footer">
-        <button class="btn btn-secondary" onclick="aplicarSimulacion()">
+        <button class="btn btn-secondary" id="btnApplySimulation">
           <i class="fas fa-check"></i> Aplicar este abono
         </button>
-        <button class="btn btn-outline" onclick="cerrarSimulador()">Cancelar</button>
+        <button class="btn btn-outline" data-close-simulator>Cancelar</button>
       </div>
     </div>
   </div>
 
-  <div id="modalEliminarObligacion" class="modal" onclick="if(event.target===this) cerrarModalEliminarObligacion()">
+  <div id="modalEliminarObligacion" class="modal">
     <div class="modal-content modal-content-sm">
       <div class="modal-header">
         <h2><i class="fas fa-trash"></i> Eliminar obligación</h2>
-        <button class="modal-close" onclick="cerrarModalEliminarObligacion()">&times;</button>
+        <button class="modal-close" data-close-delete-obligation>&times;</button>
       </div>
       <div class="modal-body">
         <p class="confirm-copy">¿Estás seguro de eliminar esta obligación? Esta acción no se puede deshacer.</p>
         <div id="detalleEliminarObligacion" class="confirm-details"></div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-danger" onclick="confirmarEliminarObligacion()">
+        <button class="btn btn-danger" id="btnConfirmDeleteObligation">
           <i class="fas fa-trash"></i> Eliminar
         </button>
-        <button class="btn btn-outline" onclick="cerrarModalEliminarObligacion()">Cancelar</button>
+        <button class="btn btn-outline" data-close-delete-obligation>Cancelar</button>
       </div>
     </div>
   </div>
 
+  <script src="security/sanitize.js"></script>
+  <script src="security/storage.js"></script>
+  <script src="security/validators.js"></script>
   <script src="app.js"></script>
   <!-- ========= MODAL DE INFORMACIÓN LEGAL ========= -->
-<div id="modalLegal" class="modal-info" onclick="if(event.target===this) cerrarModalLegal()">
+<div id="modalLegal" class="modal-info">
   <div class="modal-info-content">
-    <button class="modal-info-close" onclick="cerrarModalLegal()">&times;</button>
+    <button class="modal-info-close" id="btnCloseLegalModal">&times;</button>
     <div id="modalLegalContenido" class="modal-contenido"></div>
   </div>
 </div>
 
-<div id="demographicsModal" class="modal-info" onclick="if(event.target===this) cerrarDemografia()">
+<div id="demographicsModal" class="modal-info">
   <div class="modal-info-content demographics-modal-content">
-    <button class="modal-info-close" onclick="cerrarDemografia()">&times;</button>
+    <button class="modal-info-close" id="btnCloseDemographicsModal">&times;</button>
     <div class="modal-contenido">
       <h2><i class="fas fa-users"></i> Datos demograficos opcionales</h2>
       <p class="fecha">Puedes omitir esta informacion. Solo se guardara con fines estadisticos y no afecta los modulos financieros.</p>
@@ -703,7 +708,7 @@
     <div class="modal-content">
       <div class="modal-header">
         <h2><i class="fas fa-chart-line"></i> Proyeccion de cuota en pesos</h2>
-        <button class="modal-close" onclick="cerrarProyeccionUVR()">&times;</button>
+        <button class="modal-close" data-close-uvr-projection>&times;</button>
       </div>
       <div class="modal-body">
         <div class="projection-summary" id="proyeccionUVRResumen"></div>
@@ -729,7 +734,7 @@
         </div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-outline" onclick="cerrarProyeccionUVR()">Cerrar</button>
+        <button class="btn btn-outline" data-close-uvr-projection>Cerrar</button>
       </div>
     </div>
   </div>

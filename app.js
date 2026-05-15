@@ -100,6 +100,20 @@
 
       const fmtPct = (v) => `${(v * 100).toFixed(1)}%`;
       const byId = (id) => document.getElementById(id);
+      const sanitizeInputSafe = window.SecuritySanitize?.sanitizeInput || ((value) => String(value ?? '').replace(/<[^>]*>/g, '').trim());
+      const sanitizeObjectSafe = window.SecuritySanitize?.sanitizeObject || ((value) => value);
+      const safeText = window.SecuritySanitize?.sanitizeForRender || sanitizeInputSafe;
+      const safeAttr = window.SecuritySanitize?.sanitizeAttribute || safeText;
+      const safeDomId = (value) => sanitizeInputSafe(value).replace(/[^\w:-]/g, '') || crypto.randomUUID();
+      const saveSecureStorageSafe = window.SecurityStorage?.saveSecureStorage || ((key, value) => {
+        console.error(`Almacenamiento seguro no disponible para ${key}. No se guardo JSON plano.`);
+        return false;
+      });
+      const loadSecureStorageSafe = window.SecurityStorage?.loadSecureStorage || ((key) => {
+        console.error(`Almacenamiento seguro no disponible para ${key}.`);
+        return null;
+      });
+      const validators = window.SecurityValidators || {};
       const hoyISO = () => new Date().toISOString().slice(0, 10);
       const parsePctToDec = (pct) => (Number(pct) || 0) / 100;
       const DAY_IN_MS = 24 * 60 * 60 * 1000;
@@ -126,8 +140,35 @@
       const getInputMoneyValue = (id) => {
         const input = byId(id);
         if (!input) return 0;
-        return parseFormattedNumber(input.dataset.raw || input.value);
+        return validateCurrencyValue(input.dataset.raw || input.value, { allowZero: true, fallback: 0 });
       };
+      function validateCurrencyValue(value, options = {}) {
+        const result = validators.validateCurrency?.(value, options);
+        if (result) return result.valid ? result.value : options.fallback ?? 0;
+        const parsed = parseFormattedNumber(value);
+        return Number.isFinite(parsed) && parsed >= 0 ? parsed : options.fallback ?? 0;
+      }
+      function validateInterestValue(value, fallback = 0) {
+        const result = validators.validateInterest?.(value);
+        if (result) return result.valid ? result.value : fallback;
+        const parsed = Number(value);
+        return Number.isFinite(parsed) && parsed >= 0 && parsed <= 99 ? parsed : fallback;
+      }
+      function validateUVRValue(value, fallback = uvrActual) {
+        const result = validators.validateUVR?.(value);
+        if (result) return result.valid ? result.value : fallback;
+        const parsed = Number(value);
+        return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+      }
+      function validateDateValue(value, fallback = hoyISO()) {
+        const result = validators.validateDate?.(value);
+        if (result) return result.valid ? result.value : fallback;
+        const parsed = new Date(`${value}T00:00:00`);
+        return Number.isNaN(parsed.getTime()) ? fallback : value;
+      }
+      function pushValidatorError(errors, result) {
+        if (result && !result.valid) errors.push(result.message);
+      }
       const formatDateDisplay = (value) => {
         const date = value instanceof Date ? value : new Date(value);
         if (Number.isNaN(date.getTime())) return "--/--/----";
@@ -267,7 +308,7 @@
       }
 
       function sanearValorUvr(valor, warnings = [], fallback = uvrActual) {
-        const parsed = Number(valor);
+        const parsed = validateUVRValue(valor, Number.NaN);
         if (!Number.isFinite(parsed) || parsed < UVR_CONFIG.MIN_UVR_VALUE) {
           pushWarning(warnings, `El valor UVR no era valido. Se uso ${fallback.toFixed(2)}.`);
           return fallback;
@@ -345,19 +386,19 @@
         }
 
         box.style.display = 'block';
-        box.innerHTML = warnings.map((warning) => `<div>${warning}</div>`).join('');
+        box.innerHTML = warnings.map((warning) => `<div>${safeText(warning)}</div>`).join('');
       }
 
       function construirResumenUVRDesdeFormulario() {
         const warnings = [];
         const valorCreditoCOP = getInputMoneyValue('valorCredito');
-        const interesEA = Number(byId('interesEA')?.value);
+        const interesEA = validateInterestValue(byId('interesEA')?.value, 0);
         const numeroCuota = Number(byId('numeroCuota')?.value);
         const cantidadCuotas = Number(byId('cantidadCuotas')?.value);
         const fechaDesembolsoInput = byId('fechaDesembolsoUVR')?.value;
-        const fechaDesembolso = fechaDesembolsoInput ? toIsoDate(fechaDesembolsoInput) : hoyISO();
+        const fechaDesembolso = fechaDesembolsoInput ? validateDateValue(fechaDesembolsoInput, hoyISO()) : hoyISO();
         const fechaUVRBase = hoyISO();
-        const fechaVencimiento = byId('fechaVencimiento')?.value || addMonthsIso(hoyISO(), 1);
+        const fechaVencimiento = validateDateValue(byId('fechaVencimiento')?.value || addMonthsIso(hoyISO(), 1), addMonthsIso(hoyISO(), 1));
         const inflacionEsperadaEA = sanearInflacionPct(byId('inflacionEsperadaEA')?.value, warnings);
         const valorUVRBase = sanearValorUvr(byId('uvrManual')?.value || uvrActual, warnings);
 
@@ -535,6 +576,16 @@
       }
 
       function normalizarObligacionUVR(ob) {
+        const obSanitizada = sanitizeObjectSafe(ob || {});
+        ob = {
+          ...obSanitizada,
+          id: safeDomId(obSanitizada.id || crypto.randomUUID()),
+          entidad: sanitizeInputSafe(obSanitizada.entidad || ''),
+          tipoCredito: sanitizeInputSafe(obSanitizada.tipoCredito || ''),
+          moneda: sanitizeInputSafe(obSanitizada.moneda || 'COP'),
+          fechaProximoVencimiento: sanitizeInputSafe(obSanitizada.fechaProximoVencimiento || '')
+        };
+
         if (!esCreditoUVR(ob)) {
           return {
             ...ob,
@@ -660,6 +711,7 @@
 
       function normalizarObligacionCerrada(cerrada) {
         if (!cerrada) return cerrada;
+        cerrada = sanitizeObjectSafe(cerrada);
 
         const moneda = cerrada.moneda || 'COP';
         const referenciaObligacion = normalizarObligacionUVR({
@@ -789,6 +841,7 @@
 
       /* ========= INICIALIZACIÓN ========= */
       function inicializar() {
+        inicializarSanitizacionGlobal();
         cargarEntidades();
         cargarDatos();
         cargarLogros();
@@ -801,16 +854,34 @@
         consultarUVRActual();
       }
 
+      function inicializarSanitizacionGlobal() {
+        document.addEventListener('submit', (event) => {
+          event.target?.querySelectorAll?.('input, textarea, select').forEach((field) => {
+            window.SecuritySanitize?.sanitizeFormElement?.(field);
+          });
+        }, true);
+
+        document.addEventListener('change', (event) => {
+          if (event.target?.matches?.('input, textarea, select')) {
+            window.SecuritySanitize?.sanitizeFormElement?.(event.target);
+          }
+        }, true);
+      }
+
       function cargarEntidades() {
         const entidadesBase = ["Bancolombia", "Davivienda", "BBVA", "Lulo Bank", "Nu", "Nequi", "Addi", "Banco de Bogotá", "Banco de Occidente"];
-        const guardadas = localStorage.getItem(STORAGE_KEYS.ENTIDADES);
-        entidadesListado = guardadas ? JSON.parse(guardadas) : entidadesBase;
-        byId('entidadSelect').innerHTML = entidadesListado.map(e => `<option value="${e}">${e}</option>`).join('');
+        const guardadas = loadSecureStorageSafe(STORAGE_KEYS.ENTIDADES);
+        entidadesListado = (Array.isArray(guardadas) ? guardadas : entidadesBase)
+          .map((entidad) => sanitizeInputSafe(entidad))
+          .filter(Boolean);
+        saveSecureStorageSafe(STORAGE_KEYS.ENTIDADES, entidadesListado);
+        byId('entidadSelect').innerHTML = entidadesListado.map(e => `<option value="${safeAttr(e)}">${safeText(e)}</option>`).join('');
       }
 
       function cargarDatos() {
         try {
-          obligaciones = JSON.parse(localStorage.getItem(STORAGE_KEYS.OBLIGACIONES) || '[]')
+          obligaciones = (loadSecureStorageSafe(STORAGE_KEYS.OBLIGACIONES) || [])
+            .map((o) => sanitizeObjectSafe(o))
             .map(o => normalizarObligacionUVR({
               ...o,
               cantidadCuotasOriginal: o.cantidadCuotasOriginal ?? o.cantidadCuotas,
@@ -818,25 +889,32 @@
               historicoAbonos: o.historicoAbonos || [],
               moneda: o.moneda || 'COP'
             }));
-          obligacionesCerradas = JSON.parse(localStorage.getItem(STORAGE_KEYS.OBLIGACIONES_CERRADAS) || '[]')
+          obligacionesCerradas = (loadSecureStorageSafe(STORAGE_KEYS.OBLIGACIONES_CERRADAS) || [])
+            .map((cerrada) => sanitizeObjectSafe(cerrada))
             .map((cerrada) => normalizarObligacionCerrada(cerrada));
+          guardarDatos();
         } catch (e) {
+          console.warn('No fue posible cargar el almacenamiento financiero seguro.', e);
           obligaciones = [];
           obligacionesCerradas = [];
         }
       }
 
       function guardarDatos() {
-        localStorage.setItem(STORAGE_KEYS.OBLIGACIONES, JSON.stringify(obligaciones));
-        localStorage.setItem(STORAGE_KEYS.OBLIGACIONES_CERRADAS, JSON.stringify(obligacionesCerradas));
+        obligaciones = sanitizeObjectSafe(obligaciones).map((ob) => normalizarObligacionUVR(ob));
+        obligacionesCerradas = sanitizeObjectSafe(obligacionesCerradas).map((cerrada) => normalizarObligacionCerrada(cerrada));
+        saveSecureStorageSafe(STORAGE_KEYS.OBLIGACIONES, obligaciones);
+        saveSecureStorageSafe(STORAGE_KEYS.OBLIGACIONES_CERRADAS, obligacionesCerradas);
       }
 
       function cargarLogros() {
-        logrosDesbloqueados = JSON.parse(localStorage.getItem(STORAGE_KEYS.LOGROS) || '[]');
+        logrosDesbloqueados = sanitizeObjectSafe(loadSecureStorageSafe(STORAGE_KEYS.LOGROS) || []);
+        guardarLogros();
       }
 
       function guardarLogros() {
-        localStorage.setItem(STORAGE_KEYS.LOGROS, JSON.stringify(logrosDesbloqueados));
+        logrosDesbloqueados = sanitizeObjectSafe(logrosDesbloqueados);
+        saveSecureStorageSafe(STORAGE_KEYS.LOGROS, logrosDesbloqueados);
       }
 
       function notificar(msg, tipo = 'info') {
@@ -844,8 +922,9 @@
         const n = document.createElement('div');
         n.className = `notif ${tipo}`;
         n.id = `n-${id}`;
-        n.innerHTML = `<div>${tipo === 'success' ? '✅' : tipo === 'warning' ? '⚠️' : '🔔'} ${msg}</div>
-                      <button class="close" onclick="this.parentElement.remove()">✕</button>`;
+        n.innerHTML = `<div>${tipo === 'success' ? '✅' : tipo === 'warning' ? '⚠️' : '🔔'} ${safeText(msg)}</div>
+                      <button class="close" data-close-notification>✕</button>`;
+        n.querySelector('[data-close-notification]')?.addEventListener('click', () => n.remove());
         byId('notifications').appendChild(n);
         setTimeout(() => byId(`n-${id}`)?.remove(), 5000);
       }
@@ -1789,7 +1868,7 @@
         byId('fechaLibertad').textContent = p.fecha;
         byId('progresoLibertad').style.width = `${p.progreso}%`;
         byId('porcentajeLibertad').textContent = `${Math.round(p.progreso)}%`;
-        byId('detalleLibertad').innerHTML = p.mensajeDetalle || `💰 ${activas.length} deuda(s)`;
+        byId('detalleLibertad').textContent = p.mensajeDetalle || `💰 ${activas.length} deuda(s)`;
         
         const libertadCard = byId('libertadCard');
         if (activas.length === 0 && obligacionesCerradas.length > 0) {
@@ -2665,11 +2744,11 @@
           return `
             <div class="obligacion-history-item">
               <div class="obligacion-history-head">
-                <span class="badge ${badgeClass}">${etiqueta}</span>
-                <small>${fechaMovimiento}</small>
+                <span class="badge ${badgeClass}">${safeText(etiqueta)}</span>
+                <small>${safeText(fechaMovimiento)}</small>
               </div>
-              <div class="obligacion-history-main">${valorPrincipal}</div>
-              <div class="obligacion-history-detail">${detalles.join(' | ')}</div>
+              <div class="obligacion-history-main">${safeText(valorPrincipal)}</div>
+              <div class="obligacion-history-detail">${safeText(detalles.join(' | '))}</div>
             </div>
           `;
         }).join('');
@@ -2707,9 +2786,14 @@
         const abonoInput = byId('abono_' + id);
         const modoSelect = byId('modo_' + id);
         const tipoMovimientoSelect = byId('tipoMovimiento_' + id);
-        const montoAbono = Number(abonoInput?.value) || 0;
+        const montoAbono = validateCurrencyValue(abonoInput?.value, { allowZero: true, fallback: Number.NaN });
         const modoRecalculo = modoSelect?.value || 'mantener_cuota';
         const tipoMovimiento = normalizarTipoMovimiento(tipoMovimientoSelect?.value);
+
+        if (!Number.isFinite(montoAbono) || montoAbono < 0) {
+          notificar('Ingresa un valor monetario valido para continuar.', 'warning');
+          return;
+        }
 
         if (tipoMovimiento === TIPOS_MOVIMIENTO.ABONO_CAPITAL && montoAbono <= 0) {
           notificar('Ingresa un valor mayor a cero para registrar el abono a capital.', 'warning');
@@ -2917,6 +3001,10 @@
         }
 
         container.innerHTML = obligaciones.map(ob => {
+          const obId = safeAttr(ob.id);
+          const entidadTexto = safeText(ob.entidad);
+          const tipoCreditoTexto = safeText(ob.tipoCredito);
+          const fechaVencimientoTexto = safeText(ob.fechaProximoVencimiento);
           // CORRECCIÓN: Calcular plazo restante correctamente después de abonos
           const plazoRestante = Math.max(0, ob.cantidadCuotas - ob.numeroCuota + 1);
           const saldoMostrar = esCreditoUVR(ob) ? formatearDualUVR(ob.saldoActual, obtenerSaldoActualCOP(ob)) : fmtCOP(ob.saldoActual);
@@ -2933,25 +3021,25 @@
             : '<span class="badge badge-primary"><i class="fas fa-coins"></i> COP</span>';
           
           return `
-          <div class="card obligacion-card" data-id="${ob.id}">
+          <div class="card obligacion-card" data-id="${obId}">
             <div class="obligacion-header">
               <div class="obligacion-heading">
-                <h3>${ob.entidad} <span class="badge badge-success">${ob.tipoCredito}</span> ${monedaBadge}</h3>
-                <small><i class="far fa-calendar-alt"></i> Vence: ${ob.fechaProximoVencimiento}</small>
+                <h3>${entidadTexto} <span class="badge badge-success">${tipoCreditoTexto}</span> ${monedaBadge}</h3>
+                <small><i class="far fa-calendar-alt"></i> Vence: ${fechaVencimientoTexto}</small>
               </div>
               <div class="obligacion-header-side">
                 <div class="obligacion-badges">
                   <span class="badge badge-primary"><i class="fas fa-piggy-bank"></i> ${fmtMonto(interesesAcum, ob.moneda)}</span>
                 </div>
                 <div class="obligacion-actions">
-                  ${esCreditoUVR(ob) ? `<button class="btn btn-sm btn-outline" onclick="abrirProyeccionUVR('${ob.id}')"><i class="fas fa-chart-line"></i> Proyección</button>` : ''}
-                  <button class="btn btn-sm btn-outline" onclick="editarObligacion('${ob.id}')">
+                  ${esCreditoUVR(ob) ? `<button class="btn btn-sm btn-outline" data-obligation-action="project-uvr" data-obligation-id="${obId}"><i class="fas fa-chart-line"></i> Proyección</button>` : ''}
+                  <button class="btn btn-sm btn-outline" data-obligation-action="edit" data-obligation-id="${obId}">
                     <i class="fas fa-pen"></i> Editar
                   </button>
-                  <button class="btn btn-sm btn-danger" onclick="solicitarEliminarObligacion('${ob.id}')">
+                  <button class="btn btn-sm btn-danger" data-obligation-action="delete" data-obligation-id="${obId}">
                     <i class="fas fa-trash"></i> Eliminar
                   </button>
-                  <button class="btn btn-sm btn-outline" onclick="cerrarObligacion('${ob.id}')">
+                  <button class="btn btn-sm btn-outline" data-obligation-action="close" data-obligation-id="${obId}">
                     <i class="fas fa-check-circle"></i> Cerrar
                   </button>
                 </div>
@@ -2966,29 +3054,29 @@
             </div>
 
             <div class="grid grid-4 obligacion-payment-grid">
-              <input type="number" id="abono_${ob.id}" class="form-control" placeholder="Abono extra en COP" value="0" min="0" step="10000">
-              <select id="tipoMovimiento_${ob.id}" class="form-control" onchange="actualizarTipoMovimientoObligacion('${ob.id}')">
+              <input type="number" id="abono_${obId}" class="form-control" placeholder="Abono extra en COP" value="0" min="0" step="10000">
+              <select id="tipoMovimiento_${obId}" class="form-control" data-obligation-movement="${obId}">
                 <option value="${TIPOS_MOVIMIENTO.PAGO_CUOTA}">Pago de cuota</option>
                 <option value="${TIPOS_MOVIMIENTO.ABONO_CAPITAL}">Abono a capital</option>
               </select>
-              <select id="modo_${ob.id}" class="form-control">
+              <select id="modo_${obId}" class="form-control">
                 <option value="mantener_cuota">Mantener cuota (menos plazo)</option>
                 <option value="mantener_plazo">Mantener plazo (cuota menor)</option>
               </select>
-              <button class="btn btn-secondary" onclick="aplicarAbono('${ob.id}')">
-                <i class="fas fa-check"></i> <span id="btnMovimientoLabel_${ob.id}">Pagar cuota</span>
+              <button class="btn btn-secondary" data-obligation-action="apply-payment" data-obligation-id="${obId}">
+                <i class="fas fa-check"></i> <span id="btnMovimientoLabel_${obId}">Pagar cuota</span>
               </button>
             </div>
-            <div class="obligacion-payment-note" id="tipoMovimientoHint_${ob.id}">${obtenerDescripcionTipoMovimiento(TIPOS_MOVIMIENTO.PAGO_CUOTA)}</div>
+            <div class="obligacion-payment-note" id="tipoMovimientoHint_${obId}">${obtenerDescripcionTipoMovimiento(TIPOS_MOVIMIENTO.PAGO_CUOTA)}</div>
 
             <div class="grid grid-4 obligacion-preview-grid">
-              <div><b>Nuevo saldo:</b> <input type="text" readonly class="form-control" id="nuevoSaldo_${ob.id}" value="${saldoMostrar}"></div>
-              <div><b>Nueva cuota:</b> <input type="text" readonly class="form-control" id="nuevaCuota_${ob.id}" value="${cuotaMostrar}"></div>
-              <div><b>Plazo restante:</b> <input type="text" readonly class="form-control" id="nuevoPlazo_${ob.id}" value="${plazoRestante}"></div>
-              <div><b>Ahorro:</b> <input type="text" readonly class="form-control" id="ahorro_${ob.id}" value="${fmtMonto(0, ob.moneda)}"></div>
+              <div><b>Nuevo saldo:</b> <input type="text" readonly class="form-control" id="nuevoSaldo_${obId}" value="${safeAttr(saldoMostrar)}"></div>
+              <div><b>Nueva cuota:</b> <input type="text" readonly class="form-control" id="nuevaCuota_${obId}" value="${safeAttr(cuotaMostrar)}"></div>
+              <div><b>Plazo restante:</b> <input type="text" readonly class="form-control" id="nuevoPlazo_${obId}" value="${safeAttr(plazoRestante)}"></div>
+              <div><b>Ahorro:</b> <input type="text" readonly class="form-control" id="ahorro_${obId}" value="${safeAttr(fmtMonto(0, ob.moneda))}"></div>
             </div>
             <div class="grid grid-4 obligacion-summary-grid">
-              <div>Meses ahorrados: <span id="meses_${ob.id}">${cuotasAhorradas}</span></div>
+              <div>Meses ahorrados: <span id="meses_${obId}">${cuotasAhorradas}</span></div>
               <div>Total ahorrado: ${fmtMonto(interesesAcum, ob.moneda)}</div>
               <div>Movimientos: ${movimientosRegistrados}</div>
               <div>Abonos a capital: ${abonosCapitalRegistrados}</div>
@@ -2999,6 +3087,26 @@
             </div>
           </div>
         `}).join('');
+        bindObligacionesUI(container);
+      }
+
+      function bindObligacionesUI(container) {
+        container.querySelectorAll('[data-obligation-action]').forEach((button) => {
+          button.addEventListener('click', () => {
+            const id = button.dataset.obligationId;
+            const actions = {
+              'project-uvr': window.abrirProyeccionUVR,
+              edit: window.editarObligacion,
+              delete: window.solicitarEliminarObligacion,
+              close: window.cerrarObligacion,
+              'apply-payment': window.aplicarAbono
+            };
+            actions[button.dataset.obligationAction]?.(id);
+          });
+        });
+        container.querySelectorAll('[data-obligation-movement]').forEach((select) => {
+          select.addEventListener('change', () => window.actualizarTipoMovimientoObligacion?.(select.dataset.obligationMovement));
+        });
       }
 
       /* ========= RENDERIZADO HISTÓRICO ========= */
@@ -3039,6 +3147,8 @@
 
         container.innerHTML = obligacionesCerradas.slice().reverse().map(c => {
           const cerrada = normalizarObligacionCerrada(c);
+          const entidadTexto = safeText(cerrada.entidad || c.entidad);
+          const fechaCierreTexto = safeText(c.fechaCierre || 'Fecha no disponible');
           const numeroAbonos = c.numeroAbonos || contarMovimientosCapital(cerrada, cerrada.historicoAbonos || []);
           const valorCreditoOriginal = cerrada.valorCreditoOriginal || 0;
           const interesesEnCOP = Number(cerrada.interesesDejadosDePagarCOP || cerrada.interesesDejadosDePagar || 0);
@@ -3058,10 +3168,10 @@
                   <div>
                     <h3 style="margin:0; display:flex; align-items:center; gap:8px; flex-wrap: wrap;">
                       <i class="fas fa-check-circle" style="color:var(--color-secondary);"></i>
-                      ${c.entidad} ${monedaIcon}
+                      ${entidadTexto} ${monedaIcon}
                     </h3>
                     <small style="opacity:0.9;">
-                      <i class="far fa-calendar-alt"></i> Cerrada: ${c.fechaCierre || 'Fecha no disponible'}
+                      <i class="far fa-calendar-alt"></i> Cerrada: ${fechaCierreTexto}
                     </small>
                   </div>
                   <span class="cerrada-badge">
@@ -3214,7 +3324,7 @@
           const textoSaldo = esCreditoUVR(ob)
             ? `${fmtUVR(ob.saldoActual)} | ${fmtCOP(obtenerSaldoActualCOP(ob))}`
             : fmtCOP(ob.saldoActual);
-          return `<option value="${ob.id}" data-moneda="${ob.moneda}">${ob.entidad} - ${textoSaldo}</option>`;
+          return `<option value="${safeAttr(ob.id)}" data-moneda="${safeAttr(ob.moneda)}">${safeText(ob.entidad)} - ${safeText(textoSaldo)}</option>`;
         }).join('');
         
         actualizarLabelSimulador();
@@ -3283,7 +3393,7 @@
 
       window.actualizarSimulacion = function() {
         const obId = byId('simulacionObligacion').value;
-        const base = Math.max(0, Number(byId('simulacionAbono').value) || 0);
+        const base = validateCurrencyValue(byId('simulacionAbono').value, { allowZero: true, fallback: 0 });
         const ob = obligaciones.find(o => o.id === obId);
         if (!ob) return;
 
@@ -3307,7 +3417,7 @@
 
       window.actualizarSimulacionPersonalizada = function() {
         const obId = byId('simulacionObligacion').value;
-        const base = Math.max(0, Number(byId('simulacionAbono').value) || 0);
+        const base = validateCurrencyValue(byId('simulacionAbono').value, { allowZero: true, fallback: 0 });
         const pct = Number(byId('simulacionPorcentaje').value) / 100;
         const ob = obligaciones.find(o => o.id === obId);
         if (!ob) return;
@@ -3332,7 +3442,7 @@
 
       window.aplicarSimulacion = function() {
         const obId = byId('simulacionObligacion').value;
-        const base = Math.max(0, Number(byId('simulacionAbono').value) || 0);
+        const base = validateCurrencyValue(byId('simulacionAbono').value, { allowZero: true, fallback: 0 });
         const pct = Number(byId('simulacionPorcentaje').value) / 100;
         const input = byId(`abono_${obId}`);
         const valor = Math.round(base * (1 + pct));
@@ -3601,15 +3711,18 @@
         contenedor.classList.remove('hidden');
         contenedor.innerHTML = `
           <div class="dashboard-adjustment-copy">
-            <strong>Ajuste por eliminación:</strong> ${ajuste.entidad} salió del dashboard y estos acumulados se descontaron.
+            <strong>Ajuste por eliminación:</strong> ${safeText(ajuste.entidad)} salió del dashboard y estos acumulados se descontaron.
           </div>
           <div class="dashboard-adjustment-chips">
             ${ajuste.metricas.intereses > 0 ? `<span class="dashboard-adjustment-chip">-${fmtCOP(ajuste.metricas.intereses)} en intereses</span>` : ''}
             ${ajuste.metricas.capital > 0 ? `<span class="dashboard-adjustment-chip">-${fmtCOP(ajuste.metricas.capital)} en capital</span>` : ''}
             ${ajuste.metricas.cuotas > 0 ? `<span class="dashboard-adjustment-chip">-${ajuste.metricas.cuotas} cuota(s)</span>` : ''}
           </div>
-          <button type="button" class="dashboard-adjustment-close" onclick="cerrarAjusteDashboard()">&times;</button>
+          <button type="button" class="dashboard-adjustment-close" data-close-dashboard-adjustment>&times;</button>
         `;
+        contenedor.querySelector('[data-close-dashboard-adjustment]')?.addEventListener('click', () => {
+          window.cerrarAjusteDashboard?.();
+        });
       }
 
       function abrirModalEliminarObligacion(id) {
@@ -3627,8 +3740,8 @@
         ].filter(Boolean);
 
         detalle.innerHTML = `
-          <strong>${ob.entidad}</strong> (${ob.tipoCredito}) se eliminará de la lista activa.
-          ${chips.length > 0 ? `<div class="delete-impact-list">${chips.map((chip) => `<span class="delete-impact-chip">${chip}</span>`).join('')}</div>` : ''}
+          <strong>${safeText(ob.entidad)}</strong> (${safeText(ob.tipoCredito)}) se eliminará de la lista activa.
+          ${chips.length > 0 ? `<div class="delete-impact-list">${chips.map((chip) => `<span class="delete-impact-chip">${safeText(chip)}</span>`).join('')}</div>` : ''}
         `;
         modal.style.display = 'flex';
       }
@@ -3684,20 +3797,20 @@
       }
 
       function construirObligacionDesdeFormulario() {
-        const tipoCredito = byId('tipoCredito').value;
+        const tipoCredito = sanitizeInputSafe(byId('tipoCredito').value);
         const moneda = tipoCredito === 'vivienda' ? monedaSeleccionada : 'COP';
         const base = {
           id: obligacionEditandoId || crypto.randomUUID(),
-          entidad: byId('entidadSelect').value,
+          entidad: sanitizeInputSafe(byId('entidadSelect').value),
           tipoCredito,
           moneda,
-          fechaProximoVencimiento: byId('fechaVencimiento').value || hoyISO(),
-          interesEA: Number(byId('interesEA').value),
-          numeroCuota: Number(byId('numeroCuota').value),
-          cantidadCuotas: Number(byId('cantidadCuotas').value),
-          cantidadCuotasOriginal: Number(byId('cantidadCuotas').value),
-          cuotaInicial: Number(byId('numeroCuota').value),
-          penalidadPrepagoPct: Number(byId('penalidadPrepago').value || 0),
+          fechaProximoVencimiento: validateDateValue(sanitizeInputSafe(byId('fechaVencimiento').value), hoyISO()),
+          interesEA: validateInterestValue(sanitizeInputSafe(byId('interesEA').value), Number.NaN),
+          numeroCuota: Number(sanitizeInputSafe(byId('numeroCuota').value)),
+          cantidadCuotas: Number(sanitizeInputSafe(byId('cantidadCuotas').value)),
+          cantidadCuotasOriginal: Number(sanitizeInputSafe(byId('cantidadCuotas').value)),
+          cuotaInicial: Number(sanitizeInputSafe(byId('numeroCuota').value)),
+          penalidadPrepagoPct: validateInterestValue(sanitizeInputSafe(byId('penalidadPrepago').value || 0), 0),
           historicoAbonos: [],
           creadoAt: new Date().toISOString()
         };
@@ -3758,17 +3871,20 @@
         const errors = [];
         if (!obligacion.entidad) errors.push('Entidad requerida');
         if (!obligacion.tipoCredito) errors.push('Tipo de credito requerido');
-        if ((Number(obligacion.interesEA) || 0) < 0 || (Number(obligacion.interesEA) || 0) > 60) errors.push('Interes EA entre 0% y 60%');
+        pushValidatorError(errors, validators.validateInterest?.(obligacion.interesEA));
+        pushValidatorError(errors, validators.validateDate?.(obligacion.fechaProximoVencimiento));
         if ((Number(obligacion.numeroCuota) || 0) < 1) errors.push('Numero de cuota debe ser mayor o igual a 1');
         if ((Number(obligacion.cantidadCuotas) || 0) < (Number(obligacion.numeroCuota) || 0)) errors.push('Total de cuotas debe ser mayor o igual a la cuota actual');
 
         if (esCreditoUVR(obligacion)) {
-          if ((Number(obligacion.saldoActual) || 0) <= 0) errors.push('El saldo UVR calculado debe ser mayor a cero');
-          if ((Number(obligacion.valorCuota) || 0) <= 0) errors.push('La cuota UVR calculada debe ser mayor a cero');
-          if ((Number(obligacion.uvr?.valorUVRBase) || 0) < UVR_CONFIG.MIN_UVR_VALUE) errors.push('La UVR base debe ser valida');
+          pushValidatorError(errors, validators.validateUVR?.(obligacion.saldoActual));
+          pushValidatorError(errors, validators.validateUVR?.(obligacion.valorCuota));
+          pushValidatorError(errors, validators.validateUVR?.(obligacion.uvr?.valorUVRBase));
+          pushValidatorError(errors, validators.validateDate?.(obligacion.uvr?.fechaDesembolso));
+          pushValidatorError(errors, validators.validateDate?.(obligacion.uvr?.fechaUVRBase));
         } else {
-          if ((Number(obligacion.valorCredito) || 0) <= 0) errors.push('Valor del credito debe ser mayor a cero');
-          if ((Number(obligacion.valorCuota) || 0) <= 0) errors.push('Valor de cuota debe ser mayor a cero');
+          pushValidatorError(errors, validators.validateCurrency?.(obligacion.valorCredito, { allowZero: false }));
+          pushValidatorError(errors, validators.validateCurrency?.(obligacion.valorCuota, { allowZero: false }));
         }
 
         return errors;
@@ -3861,10 +3977,11 @@
         });
 
         byId('btnAgregarEntidad').addEventListener('click', () => {
-          const nombre = prompt('Ingresa el nombre de la nueva entidad:');
-          if (nombre && nombre.trim().length > 1) {
-            entidadesListado.push(nombre.trim());
-            localStorage.setItem(STORAGE_KEYS.ENTIDADES, JSON.stringify(entidadesListado));
+          const nombre = sanitizeInputSafe(prompt('Ingresa el nombre de la nueva entidad:'));
+          if (nombre && nombre.length > 1) {
+            entidadesListado.push(nombre);
+            entidadesListado = sanitizeObjectSafe(entidadesListado).filter(Boolean);
+            saveSecureStorageSafe(STORAGE_KEYS.ENTIDADES, entidadesListado);
             cargarEntidades();
             notificar(`✅ Entidad "${nombre}" agregada`, 'success');
           }
@@ -3895,9 +4012,9 @@
           byId(id)?.addEventListener('change', actualizarResumenUVRFormulario);
         });
         byId('uvrManual')?.addEventListener('input', () => {
-          const valor = Number(byId('uvrManual').value);
-          if (Number.isFinite(valor) && valor > 0) {
-            uvrActual = valor;
+          const valor = validators.validateUVR?.(byId('uvrManual').value);
+          if (valor?.valid) {
+            uvrActual = valor.value;
             uvrFuenteActual = 'manual';
           }
           renderizarValorUVRActual();
@@ -4094,10 +4211,10 @@ function cerrarModalLegal() {
 function enviarMensajeContacto(event) {
   event.preventDefault();
   
-  const nombre = document.getElementById('contactoNombre')?.value || '';
-  const email = document.getElementById('contactoEmail')?.value || '';
-  const asunto = document.getElementById('contactoAsunto')?.value || '';
-  const mensaje = document.getElementById('contactoMensaje')?.value || '';
+  const nombre = sanitizeInput(document.getElementById('contactoNombre')?.value || '');
+  const email = sanitizeInput(document.getElementById('contactoEmail')?.value || '');
+  const asunto = sanitizeInput(document.getElementById('contactoAsunto')?.value || '');
+  const mensaje = sanitizeInput(document.getElementById('contactoMensaje')?.value || '');
   
   notificar(`✅ Mensaje enviado (demo)\nGracias ${nombre}, te contactaremos pronto.`, 'success');
   cerrarModalLegal();
@@ -4118,6 +4235,9 @@ document.addEventListener('keydown', function(event) {
     PROVIDER: "bdn_provider"
   };
 
+  const sanitizeInputSafe = window.SecuritySanitize?.sanitizeInput || ((value) => String(value ?? '').replace(/<[^>]*>/g, '').trim());
+  const sanitizeObjectSafe = window.SecuritySanitize?.sanitizeObject || ((value) => value);
+
   const APP_CONFIG = {
     googleClientId: window.APP_CONFIG?.googleClientId || "",
     adminEmails: (window.APP_CONFIG?.adminEmails || []).map((email) => String(email).trim().toLowerCase())
@@ -4137,7 +4257,7 @@ document.addEventListener('keydown', function(event) {
 
   const byId = (id) => document.getElementById(id);
   const notify = (message, type = "info") => typeof window.notificar === "function" ? window.notificar(message, type) : undefined;
-  const normalizeEmail = (value) => String(value || "").trim().toLowerCase();
+  const normalizeEmail = (value) => sanitizeInputSafe(value).toLowerCase();
   const isDevelopmentAuthContext = () => {
     const host = window.location.hostname || "";
     return window.location.protocol === "file:" || host === "localhost" || host === "127.0.0.1";
@@ -4151,7 +4271,7 @@ document.addEventListener('keydown', function(event) {
 
   function loadUsers() {
     try {
-      users = JSON.parse(localStorage.getItem(AUTH_KEYS.USERS) || "[]");
+      users = sanitizeObjectSafe(JSON.parse(localStorage.getItem(AUTH_KEYS.USERS) || "[]"));
     } catch (_error) {
       users = [];
     }
@@ -4159,17 +4279,18 @@ document.addEventListener('keydown', function(event) {
   }
 
   function saveUsers() {
+    users = sanitizeObjectSafe(users);
     localStorage.setItem(AUTH_KEYS.USERS, JSON.stringify(users));
   }
 
   function saveSession(session) {
-    currentSession = session;
-    localStorage.setItem(AUTH_KEYS.SESSION, JSON.stringify(session));
+    currentSession = sanitizeObjectSafe(session);
+    localStorage.setItem(AUTH_KEYS.SESSION, JSON.stringify(currentSession));
   }
 
   function loadSession() {
     try {
-      currentSession = JSON.parse(localStorage.getItem(AUTH_KEYS.SESSION) || "null");
+      currentSession = sanitizeObjectSafe(JSON.parse(localStorage.getItem(AUTH_KEYS.SESSION) || "null"));
     } catch (_error) {
       currentSession = null;
     }
@@ -4238,16 +4359,17 @@ document.addEventListener('keydown', function(event) {
   }
 
   function createUser(payload) {
+    payload = sanitizeObjectSafe(payload || {});
     const user = {
       id: crypto.randomUUID(),
       email: normalizeEmail(payload.email),
-      name: payload.name || normalizeEmail(payload.email).split("@")[0],
-      role: payload.role || getRole(payload.email),
-      provider: payload.provider || "manual",
-      passwordHash: payload.passwordHash || null,
-      demographics: payload.demographics || null,
-      demographicsStatus: payload.demographicsStatus || "pending",
-      googleSub: payload.googleSub || null,
+      name: sanitizeInputSafe(payload.name || normalizeEmail(payload.email).split("@")[0]),
+      role: sanitizeInputSafe(payload.role || getRole(payload.email)),
+      provider: sanitizeInputSafe(payload.provider || "manual"),
+      passwordHash: sanitizeInputSafe(payload.passwordHash || ""),
+      demographics: sanitizeObjectSafe(payload.demographics || null),
+      demographicsStatus: sanitizeInputSafe(payload.demographicsStatus || "pending"),
+      googleSub: sanitizeInputSafe(payload.googleSub || ""),
       createdAt: new Date().toISOString(),
       lastLoginAt: null
     };
@@ -4261,6 +4383,7 @@ document.addEventListener('keydown', function(event) {
   }
 
   function updateUser(updated) {
+    updated = sanitizeObjectSafe(updated);
     users = users.map((user) => user.id === updated.id ? updated : user);
     saveUsers();
   }
@@ -4404,12 +4527,12 @@ document.addEventListener('keydown', function(event) {
 
   function openDemographics() {
     if (!currentUser) return;
-    const info = currentUser.demographics || {};
-    byId("demoEdad").value = info.edad || "";
-    byId("demoGenero").value = info.genero || "";
-    byId("demoSalario").value = info.salario || "";
-    byId("demoOcupacion").value = info.ocupacion || "";
-    byId("demoEscolaridad").value = info.escolaridad || "";
+    const info = sanitizeObjectSafe(currentUser.demographics || {});
+    byId("demoEdad").value = sanitizeInputSafe(info.edad || "");
+    byId("demoGenero").value = sanitizeInputSafe(info.genero || "");
+    byId("demoSalario").value = sanitizeInputSafe(info.salario || "");
+    byId("demoOcupacion").value = sanitizeInputSafe(info.ocupacion || "");
+    byId("demoEscolaridad").value = sanitizeInputSafe(info.escolaridad || "");
     byId("demographicsModal").style.display = "flex";
   }
 
@@ -4420,7 +4543,75 @@ document.addEventListener('keydown', function(event) {
 
   window.cerrarDemografia = closeDemographics;
 
+  function invokeGlobalHandler(name, ...args) {
+    const handler = window[name];
+    if (typeof handler === "function") {
+      handler(...args);
+    }
+  }
+
+  function bindCspSafeUI() {
+    document.querySelectorAll("[data-dashboard-metric]").forEach((card) => {
+      card.addEventListener("click", () => invokeGlobalHandler("filtrarPorMetrica", card.dataset.dashboardMetric));
+    });
+    document.querySelectorAll(".chart-view-btn[data-chart-view]").forEach((button) => {
+      button.addEventListener("click", () => invokeGlobalHandler("cambiarVistaGrafico", button.dataset.chartView));
+    });
+    byId("btnRefreshChart")?.addEventListener("click", () => invokeGlobalHandler("refrescarGraficoManual"));
+    byId("btnOpenSimulator")?.addEventListener("click", () => invokeGlobalHandler("abrirSimulador"));
+    byId("tipoCredito")?.addEventListener("change", () => invokeGlobalHandler("toggleMonedaVivienda"));
+    document.querySelectorAll("[data-currency]").forEach((option) => {
+      option.addEventListener("click", () => invokeGlobalHandler("seleccionarMoneda", option.dataset.currency));
+    });
+    byId("comparadorTipo")?.addEventListener("change", () => invokeGlobalHandler("filtrarOfertas"));
+    byId("btnBuscarOfertas")?.addEventListener("click", () => invokeGlobalHandler("filtrarOfertas"));
+    document.querySelectorAll("[data-legal-modal]").forEach((link) => {
+      link.addEventListener("click", (event) => {
+        event.preventDefault();
+        invokeGlobalHandler("abrirModalLegal", link.dataset.legalModal);
+      });
+      link.addEventListener("mouseenter", () => {
+        link.style.opacity = "1";
+      });
+      link.addEventListener("mouseleave", () => {
+        link.style.opacity = "0.7";
+      });
+    });
+    document.querySelectorAll("[data-close-simulator]").forEach((button) => {
+      button.addEventListener("click", () => invokeGlobalHandler("cerrarSimulador"));
+    });
+    byId("simulacionObligacion")?.addEventListener("change", () => invokeGlobalHandler("actualizarSimulacion"));
+    byId("simulacionAbono")?.addEventListener("input", () => invokeGlobalHandler("actualizarSimulacion"));
+    byId("simulacionPorcentaje")?.addEventListener("input", () => invokeGlobalHandler("actualizarSimulacionPersonalizada"));
+    byId("btnApplySimulation")?.addEventListener("click", () => invokeGlobalHandler("aplicarSimulacion"));
+    document.querySelectorAll("[data-close-delete-obligation]").forEach((button) => {
+      button.addEventListener("click", () => invokeGlobalHandler("cerrarModalEliminarObligacion"));
+    });
+    byId("btnConfirmDeleteObligation")?.addEventListener("click", () => invokeGlobalHandler("confirmarEliminarObligacion"));
+    byId("modalEliminarObligacion")?.addEventListener("click", (event) => {
+      if (event.target === event.currentTarget) {
+        invokeGlobalHandler("cerrarModalEliminarObligacion");
+      }
+    });
+    byId("btnCloseLegalModal")?.addEventListener("click", () => invokeGlobalHandler("cerrarModalLegal"));
+    byId("modalLegal")?.addEventListener("click", (event) => {
+      if (event.target === event.currentTarget) {
+        invokeGlobalHandler("cerrarModalLegal");
+      }
+    });
+    byId("btnCloseDemographicsModal")?.addEventListener("click", closeDemographics);
+    byId("demographicsModal")?.addEventListener("click", (event) => {
+      if (event.target === event.currentTarget) {
+        closeDemographics();
+      }
+    });
+    document.querySelectorAll("[data-close-uvr-projection]").forEach((button) => {
+      button.addEventListener("click", () => invokeGlobalHandler("cerrarProyeccionUVR"));
+    });
+  }
+
   function bindAuthUI() {
+    bindCspSafeUI();
     document.querySelectorAll(".auth-tab").forEach((button) => button.addEventListener("click", () => setAuthTab(button.dataset.authTab)));
     document.querySelectorAll("#authScreen input").forEach((input) => {
       input.addEventListener("focus", () => ensureAuthFieldVisible(input));
@@ -4428,7 +4619,7 @@ document.addEventListener('keydown', function(event) {
     byId("loginForm")?.addEventListener("submit", async (event) => {
       event.preventDefault();
       const email = normalizeEmail(byId("loginEmail").value);
-      const password = byId("loginPassword").value;
+      const password = sanitizeInputSafe(byId("loginPassword").value);
       const user = findUserByEmail(email);
       if (!user || user.provider !== "manual") {
         showAuthFeedback("No existe una cuenta manual con ese correo.");
@@ -4445,8 +4636,8 @@ document.addEventListener('keydown', function(event) {
     byId("registerForm")?.addEventListener("submit", async (event) => {
       event.preventDefault();
       const email = normalizeEmail(byId("registerEmail").value);
-      const password = byId("registerPassword").value;
-      const confirmPassword = byId("registerPasswordConfirm").value;
+      const password = sanitizeInputSafe(byId("registerPassword").value);
+      const confirmPassword = sanitizeInputSafe(byId("registerPasswordConfirm").value);
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
         showAuthFeedback("Ingresa un correo electronico valido.");
         return;
@@ -4481,11 +4672,11 @@ document.addEventListener('keydown', function(event) {
       event.preventDefault();
       if (!currentUser) return;
       currentUser.demographics = {
-        edad: byId("demoEdad").value,
-        genero: byId("demoGenero").value,
-        salario: byId("demoSalario").value,
-        ocupacion: byId("demoOcupacion").value,
-        escolaridad: byId("demoEscolaridad").value
+        edad: sanitizeInputSafe(byId("demoEdad").value),
+        genero: sanitizeInputSafe(byId("demoGenero").value),
+        salario: sanitizeInputSafe(byId("demoSalario").value),
+        ocupacion: sanitizeInputSafe(byId("demoOcupacion").value),
+        escolaridad: sanitizeInputSafe(byId("demoEscolaridad").value)
       };
       currentUser.demographicsStatus = "completed";
       updateUser(currentUser);
