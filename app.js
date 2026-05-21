@@ -4622,11 +4622,11 @@ document.addEventListener('keydown', function(event) {
       const password = sanitizeInputSafe(byId("loginPassword").value);
       const user = findUserByEmail(email);
       if (!user || user.provider !== "manual") {
-        showAuthFeedback("No existe una cuenta manual con ese correo.");
+        showAuthFeedback("El usuario y/o contraseña son incorrectos, por favor verifica e intenta de nuevo.");
         return;
       }
       if (user.passwordHash !== await hashPassword(password)) {
-        showAuthFeedback("La contrasena no coincide.");
+        showAuthFeedback("La contraseña no coincide.");
         return;
       }
       localStorage.setItem(AUTH_KEYS.PROVIDER, "manual");
@@ -4639,15 +4639,15 @@ document.addEventListener('keydown', function(event) {
       const password = sanitizeInputSafe(byId("registerPassword").value);
       const confirmPassword = sanitizeInputSafe(byId("registerPasswordConfirm").value);
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-        showAuthFeedback("Ingresa un correo electronico valido.");
+        showAuthFeedback("Ingresa un correo electrónico valido.");
         return;
       }
       if (!validatePassword(password)) {
-        showAuthFeedback("La contrasena debe tener entre 8 y 12 caracteres, con mayuscula, minuscula, numero y caracter especial.");
+        showAuthFeedback("La contraseña debe tener entre 8 y 12 caracteres, con mayúscula, minúscula, número y caracter especial.");
         return;
       }
       if (password !== confirmPassword) {
-        showAuthFeedback("La confirmacion de contrasena no coincide.");
+        showAuthFeedback("La confirmacion de contraseña no coincide.");
         return;
       }
       if (findUserByEmail(email)) {
@@ -4681,7 +4681,7 @@ document.addEventListener('keydown', function(event) {
       currentUser.demographicsStatus = "completed";
       updateUser(currentUser);
       closeDemographics();
-      notify("Datos demograficos guardados para fines estadisticos.", "success");
+      notify("Datos demográficos guardados para fines estadísticos.", "success");
     });
   }
 
